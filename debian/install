@@ -1,0 +1,2 @@
+rpmbuild/SOURCES/proton-vpn.service /lib/systemd/system
+rpmbuild/SOURCES/demo.sh /usr/bin/

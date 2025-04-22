@@ -1,0 +1,8 @@
+.debhelper
+debhelper-build-stamp
+files
+proton-vpn-daemon.debhelper.log
+proton-vpn-daemon.preinst.debhelper
+proton-vpn-daemon.postrm.debhelper
+proton-vpn-daemon.substvars
+proton-vpn-daemon

@@ -1,0 +1,11 @@
+[Unit]
+Description=Proton VPN daemon
+After=syslog.target network.target
+
+[Service]
+Type=exec
+ExecStart=/bin/bash /usr/bin/demo.sh %U
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
