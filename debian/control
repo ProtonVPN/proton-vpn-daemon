@@ -1,0 +1,12 @@
+Source: proton-vpn-daemon
+Section: python
+Priority: optional
+Maintainer: Proton AG <opensource@proton.me>
+Standards-Version: 4.1.2
+Build-Depends: debhelper (>= 10)
+Homepage: https://protonvpn.com/
+
+Package: proton-vpn-daemon
+Architecture: all
+Depends: systemd
+Description: Proton VPN Daemon

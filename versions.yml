@@ -1,0 +1,8 @@
+version: 0.1.0
+time: 2025/04/22 13:00
+author: Alexandru Cheltuitor
+email: alexandru.cheltuitor@proton.ch
+urgency: low
+stability: unstable
+description:
+- First package.

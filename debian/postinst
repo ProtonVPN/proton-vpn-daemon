@@ -1,0 +1,2 @@
+systemctl enable proton-vpn.service
+systemctl start proton-vpn.service

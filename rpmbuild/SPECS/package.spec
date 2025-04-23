@@ -1,0 +1,50 @@
+%define unmangled_name proton-vpn-daemon
+%define version 0.1.0
+%define service_file proton-vpn.service
+%define service_exec_start_file demo.sh
+%define release 1
+
+Prefix: %{_prefix}
+Name: %{unmangled_name}
+Version: %{version}
+Release: %{release}%{?dist}
+Summary: %{unmangled_name} library
+
+Group: ProtonVPN
+License: GPLv3
+Vendor: Proton AG <opensource@proton.me>
+URL: https://github.com/ProtonVPN/%{unmangled_name}
+Source0: %{service_file}
+Source1: %{service_exec_start_file}
+BuildArch: noarch
+BuildRoot: %{_tmppath}/%{unmangled_name}-%{version}-%{release}-buildroot
+
+BuildRequires: systemd-rpm-macros
+
+Requires: systemd
+
+%description
+Contains the daemon for Proton VPN.
+
+# pre un-uninstall/upgrade
+%preun
+systemctl stop proton-vpn.service
+systemctl disable proton-vpn.service
+
+# post install/upgrade
+%post
+systemctl enable proton-vpn.service
+systemctl start proton-vpn.service
+
+%install
+install -D -m 644 %{SOURCE0} %{buildroot}%{_unitdir}/%{service_file}
+install -D -m 744 %{SOURCE1} %{buildroot}%{_bindir}/%{service_exec_start_file}
+
+%files
+%{_unitdir}/%{service_file}
+%{_bindir}/%{service_exec_start_file}
+%defattr(-,root,root)
+
+%changelog
+* Tue Apr 22 2025 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.1.0
+- First package
