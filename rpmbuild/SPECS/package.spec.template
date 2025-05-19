@@ -1,7 +1,7 @@
 %define unmangled_name proton-vpn-daemon
 %define version {version}
-%define service_file proton-vpn.service
-%define service_exec_start_file demo.sh
+%define service_file me.proton.VPN.service
+%define introspection_xml_file me.proton.VPN.conf
 %define release 1
 
 Prefix: %{{_prefix}}
@@ -14,35 +14,52 @@ Group: ProtonVPN
 License: GPLv3
 Vendor: Proton AG <opensource@proton.me>
 URL: https://github.com/ProtonVPN/%{{unmangled_name}}
-Source0: %{{service_file}}
-Source1: %{{service_exec_start_file}}
+Source0: %{{unmangled_name}}-%{{version}}.tar.gz
+Source1: %{{service_file}}
+Source2: %{{introspection_xml_file}}
 BuildArch: noarch
 BuildRoot: %{{_tmppath}}/%{{unmangled_name}}-%{{version}}-%{{release}}-buildroot
 
+BuildRequires: python3-devel
+BuildRequires: python3-setuptools
+BuildRequires: python3-packaging
+BuildRequires: systemd
 BuildRequires: systemd-rpm-macros
 
 Requires: systemd
+Requires: python3-dbus-next
+Requires: python3-packaging
 
 %description
 Contains the daemon for Proton VPN.
 
 # pre un-uninstall/upgrade
 %preun
-systemctl stop proton-vpn.service
-systemctl disable proton-vpn.service
+systemctl stop %{{service_file}}
+systemctl disable %{{service_file}}
+systemctl daemon-reload
 
 # post install/upgrade
 %post
-systemctl enable proton-vpn.service
-systemctl start proton-vpn.service
+systemctl daemon-reload
+systemctl enable %{{service_file}}
+systemctl start %{{service_file}}
+
+%prep
+%setup -n %{{unmangled_name}}-%{{version}} -n %{{unmangled_name}}-%{{version}}
+
+%build
+%{{python3}} setup.py build
 
 %install
-install -D -m 644 %{{SOURCE0}} %{{buildroot}}%{{_unitdir}}/%{{service_file}}
-install -D -m 744 %{{SOURCE1}} %{{buildroot}}%{{_bindir}}/%{{service_exec_start_file}}
+install -D -m 644 %{{SOURCE1}} %{{buildroot}}%{{_unitdir}}/%{{service_file}}
+install -D -m 644 %{{SOURCE2}} %{{buildroot}}%{{_sysconfdir}}/dbus-1/system.d/%{{introspection_xml_file}}
+%{{python3}} setup.py install --single-version-externally-managed -O1 --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES
 
-%files
+%files -f INSTALLED_FILES
+%{{python3_sitelib}}/proton_vpn_daemon-%{{version}}*.egg-info/
 %{{_unitdir}}/%{{service_file}}
-%{{_bindir}}/%{{service_exec_start_file}}
+%{{_sysconfdir}}/dbus-1/system.d/%{{introspection_xml_file}}
 %defattr(-,root,root)
 
 %changelog

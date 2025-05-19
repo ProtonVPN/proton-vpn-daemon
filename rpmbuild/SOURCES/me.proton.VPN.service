@@ -1,0 +1,13 @@
+[Unit]
+Description=Proton VPN Daemon
+After=network.target
+
+[Service]
+Type=dbus
+BusName=me.proton.VPN
+ExecStart=/usr/bin/proton-vpn-daemon
+Restart=always
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target
