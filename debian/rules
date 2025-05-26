@@ -1,9 +1,10 @@
 #!/usr/bin/make -f
 
-export DESTDIR=debian/tmp
+export PYBUILD_NAME=proton-vpn-daemon
 
 %:
-	dh $@
+	dh $@ --with python3 --buildsystem=pybuild
 override_dh_auto_install:
-	install -D -m 644 rpmbuild/SOURCES/proton-vpn.service $(DESTDIR)/lib/systemd/system/proton-vpn.service
-	install -D -m 744 rpmbuild/SOURCES/demo.sh $(DESTDIR)/usr/bin/demo.sh
+	dh_auto_install
+	install -D -m 644 rpmbuild/SOURCES/me.proton.VPN.service debian/proton-vpn-daemon/usr/lib/systemd/system/me.proton.VPN.service
+	install -D -m 644 rpmbuild/SOURCES/me.proton.VPN.conf debian/proton-vpn-daemon/etc/dbus-1/system.d/me.proton.VPN.conf

@@ -1,2 +1,3 @@
-systemctl stop proton-vpn.service
-systemctl disable proton-vpn.service
+systemctl stop me.proton.VPN.service
+systemctl disable me.proton.VPN.service
+systemctl daemon-reload
