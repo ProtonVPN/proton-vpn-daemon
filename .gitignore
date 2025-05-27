@@ -1,3 +1,6 @@
 *pycache*
 *.egg-info
 venv
+*.pybuild*
+*.deb
+*.debhelper

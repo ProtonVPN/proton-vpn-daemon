@@ -22,12 +22,10 @@ BuildRoot: %{{_tmppath}}/%{{unmangled_name}}-%{{version}}-%{{release}}-buildroot
 
 BuildRequires: python3-devel
 BuildRequires: python3-setuptools
-BuildRequires: python3-packaging
-BuildRequires: systemd
 BuildRequires: systemd-rpm-macros
 
 Requires: systemd
-Requires: python3-dbus-next
+Requires: python3-dbus-fast
 Requires: python3-packaging
 
 %description

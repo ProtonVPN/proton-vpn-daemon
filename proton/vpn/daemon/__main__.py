@@ -1,7 +1,7 @@
 import asyncio
-from dbus_next.aio import MessageBus
-from dbus_next.service import (ServiceInterface, method, dbus_property, signal)
-from dbus_next import Variant, BusType
+from dbus_fast.aio import MessageBus
+from dbus_fast.service import (ServiceInterface, method, dbus_property, signal)
+from dbus_fast import Variant, BusType
 
 # Define a service interface
 

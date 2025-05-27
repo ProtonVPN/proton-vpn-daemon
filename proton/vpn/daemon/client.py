@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import asyncio
-from dbus_next.aio import MessageBus
-from dbus_next import BusType
+from dbus_fast.aio import MessageBus
+from dbus_fast import BusType
 
 
 async def main():

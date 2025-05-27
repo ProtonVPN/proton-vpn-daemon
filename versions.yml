@@ -1,5 +1,14 @@
+version: 0.2.0
+time: 2025/05/27 13:00
+author: Alexandru Cheltuitor
+email: alexandru.cheltuitor@proton.ch
+urgency: low
+stability: unstable
+description:
+- Fix bug where it was being imported from dbus-next.
+---
 version: 0.1.0
-time: 2025/04/22 13:00
+time: 2025/05/22 13:00
 author: Alexandru Cheltuitor
 email: alexandru.cheltuitor@proton.ch
 urgency: low
