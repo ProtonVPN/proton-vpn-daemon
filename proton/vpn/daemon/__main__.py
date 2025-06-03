@@ -1,42 +1,51 @@
+"""All the assets the app uses are available in this module.
+
+
+Copyright (c) 2025 Proton AG
+
+This file is part of Proton VPN.
+
+Proton VPN is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Proton VPN is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
+"""
+import os
 import asyncio
-from dbus_fast.aio import MessageBus
-from dbus_fast.service import (ServiceInterface, method, dbus_property, signal)
-from dbus_fast import Variant, BusType
+import logging
+from systemd.journal import JournalHandler
 
-# Define a service interface
+from proton.vpn.daemon.split_tunneling.service import \
+    init_split_tunneling_daemon
 
-
-class VPNInterface(ServiceInterface):
-    def __init__(self):
-        super().__init__('me.proton.VPN')
-
-    @method()
-    async def set_config(self) -> 's':
-        print("Called set_config()!")
-        return "Called set_config()!"
-
-    @method()
-    async def clear_config(self) -> 's':
-        print("Called clear_config()!")
-        return "Called clear_config()!"
+log = logger = logging.getLogger(__name__)
+log.addHandler(JournalHandler())
 
 
 async def main():
-    # Connect to the session bus (replace BusType.SESSION with BusType.SYSTEM if needed)
-    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    """Main method to call daemons.
+    """
+    logging_level = logging.INFO
+    if os.environ.get("PROTON_VPN_DEBUG", "false").lower() == "true":
+        logging_level = logging.DEBUG
 
-    # Request a well-known name on the bus (similar to owning a service name)
-    name = await bus.request_name('me.proton.VPN')
+    log.setLevel(logging_level)
 
-    # Export our interface at a particular object path.
-    interface = VPNInterface()
-    bus.export('/me/proton/VPN', interface)
-
-    print("Service is running. Press Ctrl+C to exit.")
-    # Run forever
+    await init_split_tunneling_daemon()
 
 
 def run_forever():
+    """Runs the loop forever
+    """
+    log.info("Logging Proton VPN daemon journalctl")
     loop = asyncio.new_event_loop()
     loop.run_until_complete(main())
     loop.run_forever()

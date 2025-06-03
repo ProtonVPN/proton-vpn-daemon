@@ -15,12 +15,15 @@ setup(
     author_email="opensource@proton.me",
     url="https://github.com/ProtonVPN/proton-vpn-daemon",
     install_requires=[
-        "dbus-next",
+        "dbus-fast",
+        "systemd-python",
         "packaging",
     ],
     extras_require={
         "development": [
             "wheel",
+            "flake8",
+            "pylint",
         ]
     },
     packages=find_namespace_packages(include=["proton.*"]),
@@ -39,7 +42,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            ['proton-vpn-daemon = proton.vpn.daemon.__main__:run_forever'],
+            ["proton-vpn-daemon = proton.vpn.daemon.__main__:run_forever"],
         ],
     }
 )

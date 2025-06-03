@@ -5,7 +5,7 @@
 %define release 1
 
 Prefix: %{{_prefix}}
-Name: %{{unmangled_name}}
+Name: python3-%{{unmangled_name}}
 Version: %{{version}}
 Release: %{{release}}%{{?dist}}
 Summary: %{{unmangled_name}} library
@@ -27,6 +27,7 @@ BuildRequires: systemd-rpm-macros
 Requires: systemd
 Requires: python3-dbus-fast
 Requires: python3-packaging
+Requires: python3-systemd
 
 %description
 Contains the daemon for Proton VPN.
