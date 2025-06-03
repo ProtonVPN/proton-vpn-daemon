@@ -36,7 +36,7 @@ async def main():
 def run_forever():
     """Runs the loop forever
     """
-    log.info("Logging Proton VPN daemon to journalctl.")
+    log.info("Starting Proton VPN daemon")
     loop = asyncio.new_event_loop()
     loop.run_until_complete(main())
     loop.run_forever()

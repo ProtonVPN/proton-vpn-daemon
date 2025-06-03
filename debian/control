@@ -3,10 +3,10 @@ Section: python
 Priority: optional
 Maintainer: Proton AG <opensource@proton.me>
 Standards-Version: 4.1.2
-Build-Depends: debhelper (>= 9), dh-python, python3-all, python3-setuptools
+Build-Depends: debhelper (>= 9), dh-python, python3-all, python3-setuptools, python3-dbus-fast, python3-systemd, python3-proton-vpn-api-core (>= 0.44.0), python3-proton-core, systemd
 Homepage: https://protonvpn.com/
 
 Package: proton-vpn-daemon
 Architecture: all
-Depends: ${python3:Depends}, ${misc:Depends}, python3-packaging, python3-dbus-fast, python3-systemd, systemd
+Depends: ${python3:Depends}, ${misc:Depends}, python3-packaging, python3-dbus-fast, python3-systemd, python3-proton-vpn-api-core (>= 0.44.0), python3-proton-core, systemd
 Description: Proton VPN Daemon

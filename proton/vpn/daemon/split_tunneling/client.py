@@ -19,85 +19,160 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from __future__ import annotations
-from typing import Union
+from typing import Optional, Union
 
 from dbus_fast.aio import MessageBus
 from dbus_fast import BusType
 import dbus_fast
 
 from proton.vpn.daemon.split_tunneling import dbus_translator as translator
-from proton.vpn.daemon.split_tunneling.config import SplitTunnelingConfig
-from proton.vpn.daemon import exceptions
+from proton.vpn.core.settings import SplitTunnelingConfig
+from proton.vpn.split_tunneling import exceptions
+from proton.vpn.split_tunneling import SplitTunneling
 
 
-class SplitTunnelingService:
+class SplitTunnelingDbusClient(SplitTunneling):
     """Split tunneling service that abstracts from necessary initializations.
 
     Use this class to talk to our backend daemon.
     """
-
-    def __init__(self, interface):
+    def __init__(self, uid: int, interface: str):
+        super().__init__(uid)
         self._interface = interface
 
     @staticmethod
-    async def init() -> SplitTunnelingService:
+    async def init(uid: int) -> SplitTunnelingDbusClient:
         """Initializes the daemon.
 
         Returns:
-            SplitTunnelingService: new instance of the daemon
+            SplitTunnelingDbusClient: new instance of the daemon
         """
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-        introspection = await bus.introspect("me.proton.VPN", "/me/proton/VPN")
+        try:
+            introspection = await bus.introspect(
+                "me.proton.VPN", "/me/proton/VPN"
+            )
+        except dbus_fast.errors.DBusError as excp:
+            raise exceptions.SplitTunnelingError(
+                "Unable to start introspection"
+            ) from excp
         obj = bus.get_proxy_object(
             "me.proton.VPN", "/me/proton/VPN", introspection
         )
-        return SplitTunnelingService(
-            interface=obj.get_interface("me.proton.VPN")
+        return SplitTunnelingDbusClient(
+            uid=uid, interface=obj.get_interface("me.proton.VPN")
         )
 
-    async def set_config(self, config: SplitTunnelingConfig, uid: int) -> None:
-        """Sets a new config. Sends data to the daemon.
+    async def set_config(self, config: SplitTunnelingConfig) -> None:
+        """Sets a new config for instance uid.
+
+        Raises:
+            exceptions.SplitTunnelingError: whenever there is a dbus exception
 
         Args:
             config (SplitTunnelingConfig): the object containing the data
-            uid (int): uid that the config has to be applied for
         """
         dbus_dict = translator.to_dbus_dict(config)
         try:
-            await self._interface.call_set_config(dbus_dict, uid)
+            await self._interface.call_set_config(self._uid, dbus_dict)
         except dbus_fast.errors.DBusError as excp:
             raise exceptions.SplitTunnelingError(
-                f"Error setting new split tunneling configuration for {uid}"
+                "Error setting new split tunneling "
+                f"configuration for {self._uid}"
             ) from excp
 
-    async def get_config(self, uid: int) -> Union[SplitTunnelingConfig, None]:
-        """Get config that is related to the specified uid.
+    async def get_config(self) -> Optional[SplitTunnelingConfig]:
+        """Returns config for instance uid.
 
-        Args:
-            uid (int): uid to get the data for
+        Raises:
+            exceptions.SplitTunnelingError: whenever there is a dbus exception
 
         Returns:
             SplitTunnelingConfig: data stored for the specified uid
         """
         try:
-            dbus_dict = await self._interface.call_get_config(uid)
+            dbus_dict = await self._interface.call_get_config(self._uid)
         except dbus_fast.errors.DBusError as excp:
             raise exceptions.SplitTunnelingError(
-                f"Error getting split tunneling configuration for {uid}"
+                f"Error getting split tunneling configuration for {self._uid}"
             ) from excp
 
-        config = translator.from_dbus_dict(dbus_dict)
-        return None if config.mode == "none" else config
+        if not dbus_dict:
+            return None
 
-    async def clear_config(self, uid: int) -> None:
-        """Clears data stored for the specified uid.
+        return translator.from_dbus_dict(dbus_dict)
 
-        Args:
-            uid (int): uid that data is to be cleared for
+    async def clear_config(self) -> None:
+        """Clears config stored for instance uid.
+
+        Raises:
+            exceptions.SplitTunnelingError: whenever there is a dbus exception
         """
         try:
-            await self._interface.call_clear_config(uid)
+            await self._interface.call_clear_config(self._uid)
         except dbus_fast.errors.DBusError as excp:
             raise exceptions.SplitTunnelingError(
-                f"Error clearing split tunneling config for {uid}"
+                f"Error clearing split tunneling config for {self._uid}"
             ) from excp
+
+    async def get_all_configs(
+            self
+    ) -> Union[
+        list[tuple[int, SplitTunnelingConfig]],
+        list
+    ]:
+        """Returns a list of all configs.
+
+        Raises:
+            exceptions.SplitTunnelingError: whenever there is a dbus exception
+
+        Returns:
+            list[Optional[tuple[int, SplitTunnelingConfig]]]: \
+                all stored configs
+        """
+        try:
+            all_configs = await self._interface.call_get_all_configs()
+        except dbus_fast.errors.DBusError as excp:
+            raise exceptions.SplitTunnelingError(
+                "Error getting all configs"
+            ) from excp
+
+        list_of_parsed_configs = []
+        for uid, config in all_configs:
+            list_of_parsed_configs.append(
+                (uid, translator.from_dbus_dict(config))
+            )
+
+        return list_of_parsed_configs
+
+    @classmethod
+    def _get_priority(cls) -> int:
+        """
+        Priority of the split tunneling implementation.
+
+        To be implemented by subclasses.
+        """
+        return 1
+
+    @classmethod
+    def _validate(cls) -> bool:
+        """
+        Determines whether the split tunneling connection
+        implementation is valid or not.
+        """
+        import subprocess  # noqa: E501 # pylint: disable=import-outside-toplevel # nosec B404 # nosemgrep: gitlab.bandit.B404
+
+        try:
+            subprocess.check_output(  # nosec B603
+                [
+                    "/usr/bin/systemctl",
+                    "is-active",
+                    "--quiet",
+                    "me.proton.VPN"
+                ],
+                stderr=subprocess.STDOUT
+            )
+        except subprocess.CalledProcessError:
+            return False
+
+        return True

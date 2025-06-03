@@ -6,3 +6,4 @@ venv
 *.debhelper
 dist
 debian/changelog
+build

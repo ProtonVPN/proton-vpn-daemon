@@ -18,6 +18,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-from proton.vpn.daemon.split_tunneling.client import SplitTunnelingService
+from proton.vpn.daemon.split_tunneling.client import SplitTunnelingDbusClient
 
-__all__ = ["SplitTunnelingService"]
+__all__ = ["SplitTunnelingDbusClient"]

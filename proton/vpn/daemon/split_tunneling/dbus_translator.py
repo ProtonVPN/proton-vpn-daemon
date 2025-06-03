@@ -20,7 +20,7 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from typing import Dict
 from dbus_fast import Variant
-from proton.vpn.daemon.split_tunneling.config import SplitTunnelingConfig
+from proton.vpn.core.settings import SplitTunnelingConfig, SplitTunnelingMode
 
 
 def to_dbus_dict(data: SplitTunnelingConfig) -> Dict[str, object]:
@@ -33,7 +33,7 @@ def to_dbus_dict(data: SplitTunnelingConfig) -> Dict[str, object]:
         dict: keys are strings and values are `Variant`
     """
     return {
-        "mode": Variant("s", data.mode),
+        "mode": Variant("s", data.mode.value),
         "app_paths": Variant("as", data.app_paths),
         "ip_ranges": Variant("as", data.ip_ranges),
     }
@@ -49,7 +49,7 @@ def from_dbus_dict(data: Dict[str, object]) -> SplitTunnelingConfig:
         SplitTunnelingConfig: new config object
     """
     return SplitTunnelingConfig(
-        mode=data["mode"].value,
+        mode=SplitTunnelingMode(data["mode"].value),
         app_paths=data["app_paths"].value,
         ip_ranges=data["ip_ranges"].value
     )
