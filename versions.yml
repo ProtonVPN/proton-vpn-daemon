@@ -1,3 +1,12 @@
+version: 0.4.0
+time: 2025/06/04 10:00
+author: Alexandru Cheltuitor
+email: alexandru.cheltuitor@proton.ch
+urgency: low
+stability: unstable
+description:
+- Fix filepath for debian file install.
+---
 version: 0.3.0
 time: 2025/06/03 15:00
 author: Alexandru Cheltuitor
