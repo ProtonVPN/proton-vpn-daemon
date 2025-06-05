@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from __future__ import annotations
+from typing import Union
 
 from dbus_fast.aio import MessageBus
 from dbus_fast import BusType
@@ -69,7 +70,7 @@ class SplitTunnelingService:
                 f"Error setting new split tunneling configuration for {uid}"
             ) from excp
 
-    async def get_config(self, uid: int) -> SplitTunnelingConfig:
+    async def get_config(self, uid: int) -> Union[SplitTunnelingConfig, None]:
         """Get config that is related to the specified uid.
 
         Args:
@@ -85,7 +86,8 @@ class SplitTunnelingService:
                 f"Error getting split tunneling configuration for {uid}"
             ) from excp
 
-        return translator.from_dbus_dict(dbus_dict)
+        config = translator.from_dbus_dict(dbus_dict)
+        return None if config.mode == "none" else config
 
     async def clear_config(self, uid: int) -> None:
         """Clears data stored for the specified uid.

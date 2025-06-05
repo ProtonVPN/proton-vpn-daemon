@@ -1,23 +1,30 @@
 1. `sudo nano /usr/lib/systemd/system/me.proton.VPN.service`
-    1. Paste
-        ```
-        [Unit]
-        Description=Proton VPN Daemon
-        After=network.target
+    ```
+    [Unit]
+    Description=Proton VPN Daemon
+    After=network.target
 
-        [Service]
-        Type=dbus
-        BusName=me.proton.VPN
-        ExecStart=/usr/bin/proton-vpn-daemon
-        Restart=always
-        TimeoutStartSec=30
+    [Service]
+    Type=dbus
+    BusName=me.proton.VPN
+    ExecStart=/usr/bin/proton-vpn-daemon
+    Restart=always
+    TimeoutStartSec=30
 
-        [Install]
-        WantedBy=multi-user.target
-        ```
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+3. `sudo nano /etc/dbus-1/system-services/me.proton.VPN.service`
+    ```
+    [D-BUS Service]
+    Name=me.proton.VPN
+    Exec=/bin/false
+    User=root
+    SystemdService=proton.VPN.service
+    ```
 
 2. `sudo nano /etc/dbus-1/system.d/me.proton.VPN.conf`
-    - Paste
     ```
     <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
@@ -34,7 +41,7 @@
     </busconfig>
     ```
 
-3. `sudo systemctl daemon-reload && sudo systemctl start me.proton.VPN.service && sudo systemctl enable me.proton.VPN.service && sudo systemctl status me.proton.VPN.service`
+3. `sudo systemctl daemon-reload && sudo systemctl enable --now me.proton.VPN.service && sudo systemctl status me.proton.VPN.service`
 
 
 ### For testing

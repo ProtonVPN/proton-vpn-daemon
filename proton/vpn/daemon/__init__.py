@@ -18,32 +18,10 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-import asyncio
 import logging
-
-from proton.vpn.daemon.split_tunneling.service import \
-    init_split_tunneling_daemon
+from systemd.journal import JournalHandler
 
 log = logger = logging.getLogger(__name__)
 
-
-async def main():
-    """Main method to call daemons.
-    """
-    await init_split_tunneling_daemon()
-
-
-def run_forever():
-    """Runs the loop forever
-    """
-    log.info("Logging Proton VPN daemon to journalctl.")
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(main())
-    loop.run_forever()
-
-
-if __name__ == '__main__':
-    try:
-        run_forever()
-    except KeyboardInterrupt:
-        print("Service stopped.")
+log.addHandler(JournalHandler())
+log.setLevel(logging.DEBUG)

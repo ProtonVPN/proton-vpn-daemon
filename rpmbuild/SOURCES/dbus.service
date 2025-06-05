@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=me.proton.VPN
+Exec=/bin/false
+User=root
+SystemdService=proton.VPN.service

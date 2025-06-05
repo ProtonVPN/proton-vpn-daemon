@@ -4,3 +4,5 @@ venv
 *.pybuild*
 *.deb
 *.debhelper
+dist
+debian/changelog

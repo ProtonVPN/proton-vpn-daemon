@@ -26,7 +26,7 @@ setup(
             "pylint",
         ]
     },
-    packages=find_namespace_packages(include=["proton.*"]),
+    packages=find_namespace_packages(include=["proton.vpn.daemon*"]),
     include_package_data=True,
     python_requires=">=3.9",
     license="GPLv3",

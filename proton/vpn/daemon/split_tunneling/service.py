@@ -86,17 +86,14 @@ class SplitTunnelingDbus(ServiceInterface):
                 `v`: value is a `Variant`
             uid: `q` is a uint16
         """
-        log.debug(  # pylint: disable=logging-fstring-interpolation
-            f"SetConfig: (config:{config} - uid:{uid})"
-        )
+        # pylint: disable=logging-fstring-interpolation
+        log.debug(f"set_config: config:{config} - uid:{uid}")
         self._user_configs.append(
             UserConfig(
                 uid=uid,
                 config=translator.from_dbus_dict(config)
             )
         )
-        log.debug(  # pylint: disable=logging-fstring-interpolation
-            f"{self._user_configs}")
 
     @method(name="GetConfig")
     async def get_config(self, uid: "q") -> "a{sv}":  # noqa: F722,F821
@@ -114,11 +111,14 @@ class SplitTunnelingDbus(ServiceInterface):
 
             It can also return an array with empty values.
         """
+        # pylint: disable=logging-fstring-interpolation
         for user_config in self._user_configs:
             if user_config.uid == uid:
+                log.debug(f"get_config: Found config for uid:{uid}")
                 return translator.to_dbus_dict(user_config.config)
 
-        return None
+        log.debug(f"get_config: No config found for uid:{uid}")
+        return translator.to_dbus_dict(SplitTunnelingConfig("none", [], []))
 
     @method(name="ClearConfig")
     async def clear_config(self, uid: "q"):  # noqa: F821
@@ -127,13 +127,17 @@ class SplitTunnelingDbus(ServiceInterface):
         Args:
             uid (uint16): uid of the user
         """
+        # pylint: disable=logging-fstring-interpolation
+        original_len = (self._user_configs)
         self._user_configs = [
             user_config
             for user_config in self._user_configs
             if user_config.uid != uid
         ]
-        log.debug(  # pylint: disable=logging-fstring-interpolation
-            f"{self._user_configs}")
+        new_len = (self._user_configs)
+        msg = f"deleted config for uid:{uid}" \
+            if original_len != new_len else f"no config found for uid:{uid}"
+        log.debug(f"clear_config: {msg}")
 
 
 async def init_split_tunneling_daemon():
