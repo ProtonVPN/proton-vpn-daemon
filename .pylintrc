@@ -1,0 +1,2 @@
+[MASTER]
+ignore-paths=proton/vpn/daemon/split_tunneling/apps/pyroute2/.*

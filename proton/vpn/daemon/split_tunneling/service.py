@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""All the assets the app uses are available in this module.
-
-
+"""
 Copyright (c) 2025 Proton AG
 
 This file is part of Proton VPN.
@@ -22,7 +20,6 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import logging
 
 from dbus_fast.aio import MessageBus
 from dbus_fast.service import ServiceInterface, method
@@ -30,8 +27,7 @@ from dbus_fast import BusType
 
 from proton.vpn.core.settings import SplitTunnelingConfig
 from proton.vpn.daemon.split_tunneling import dbus_translator as translator
-
-log = logger = logging.getLogger(__name__)
+from proton.vpn.daemon.split_tunneling.split_tunneling import SplitTunnelingService
 
 
 @dataclass
@@ -53,7 +49,7 @@ class SplitTunnelingDbus(ServiceInterface):
 
     def __init__(self):
         super().__init__("me.proton.VPN")
-        self._user_configs = []
+        self.st_service = SplitTunnelingService()
 
     @method(name="SetConfig")
     async def set_config(self, uid: "q", config: "a{sv}"):  # noqa: F722,F821
@@ -86,30 +82,8 @@ class SplitTunnelingDbus(ServiceInterface):
                 `v`: value is a `Variant`
             uid: `q` is a uint16
         """
-        # pylint: disable=logging-fstring-interpolation
-        log.debug(f"set_config: config:{config} - uid:{uid}")
-        translated_config = translator.from_dbus_dict(config)
-        if not self._uid_configured(uid):
-            self._add_new_config(uid, translated_config)
-        else:
-            self._replace_config_for_uid(uid, translated_config)
-
-    def _uid_configured(self, uid: int):
-        if not self._user_configs:
-            return False
-
-        return any(uid == u_config.uid for u_config in self._user_configs)
-
-    def _add_new_config(self, uid: int, config: SplitTunnelingConfig):
-        self._user_configs.append(
-            UserConfig(uid=uid, config=config)
-        )
-
-    def _replace_config_for_uid(self, uid: int, config: SplitTunnelingConfig):
-        for u_config in self._user_configs:
-            if u_config.uid == uid:
-                u_config.config = config
-                break
+        config: SplitTunnelingConfig = translator.from_dbus_dict(config)
+        await self.st_service.set_config(uid, config)
 
     @method(name="GetConfig")
     async def get_config(self, uid: "q") -> "a{sv}":  # noqa: F722,F821
@@ -127,14 +101,8 @@ class SplitTunnelingDbus(ServiceInterface):
 
             It can also return an array with empty values.
         """
-        # pylint: disable=logging-fstring-interpolation
-        for user_config in self._user_configs:
-            if user_config.uid == uid:
-                log.debug(f"get_config: Found config for uid:{uid}")
-                return translator.to_dbus_dict(user_config.config)
-
-        log.debug(f"get_config: No config found for uid:{uid}")
-        return {}
+        config = self.st_service.get_config(uid)
+        return translator.to_dbus_dict(config) if config else {}
 
     @method(name="ClearConfig")
     async def clear_config(self, uid: "q"):  # noqa: F821
@@ -143,17 +111,7 @@ class SplitTunnelingDbus(ServiceInterface):
         Args:
             uid (uint16): uid of the user
         """
-        # pylint: disable=logging-fstring-interpolation
-        original_len = (self._user_configs)
-        self._user_configs = [
-            user_config
-            for user_config in self._user_configs
-            if user_config.uid != uid
-        ]
-        new_len = (self._user_configs)
-        msg = f"deleted config for uid:{uid}" \
-            if original_len != new_len else f"no config found for uid:{uid}"
-        log.debug(f"clear_config: {msg}")
+        await self.st_service.clear_config(uid)
 
     @method(name="GetAllConfigs")
     async def get_all_configs(self) -> "a(qa{sv})":  # noqa: F722
@@ -162,16 +120,10 @@ class SplitTunnelingDbus(ServiceInterface):
         Returns:
             list[dict[str, Variant]]: all stored configs
         """
-        list_of_all_configs = []
-        for user_config in self._user_configs:
-            list_of_all_configs.append(
-                (
-                    user_config.uid,
-                    translator.to_dbus_dict(user_config.config)
-                )
-            )
-
-        return list_of_all_configs
+        return [
+            (uid, translator.to_dbus_dict(config))
+            for uid, config in self.st_service.get_all_configs()
+        ]
 
 
 async def init_split_tunneling_daemon():

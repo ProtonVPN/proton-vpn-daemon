@@ -1,6 +1,4 @@
-"""All the assets the app uses are available in this module.
-
-
+"""
 Copyright (c) 2025 Proton AG
 
 This file is part of Proton VPN.

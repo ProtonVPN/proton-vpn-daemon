@@ -1,6 +1,4 @@
-"""All the assets the app uses are available in this module.
-
-
+"""
 Copyright (c) 2025 Proton AG
 
 This file is part of Proton VPN.
@@ -21,7 +19,7 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 import logging
 from systemd.journal import JournalHandler
 
-log = logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
-log.addHandler(JournalHandler())
-log.setLevel(logging.DEBUG)
+logger.addHandler(JournalHandler())
+logger.setLevel(logging.INFO)

@@ -2,3 +2,7 @@ include:
  - project: 'ProtonVPN/Linux/integration/ci-libraries'
    ref: develop
    file: 'develop-pipeline.yml'
+
+variables:
+  BANDIT_CLI_ARGS: "--exclude ./tests,./proton/vpn/daemon/split_tunneling/apps/pyroute2"
+  SEMGREP_CLI_ARGS: "--exclude tests --exclude proton/vpn/daemon/split_tunneling/apps/pyroute2"

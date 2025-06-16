@@ -18,14 +18,18 @@ setup(
         "dbus-fast",
         "systemd-python",
         "packaging",
-        "proton-core",
-        "proton-vpn-api-core"
+        "proton-vpn-api-core",
+        "pyroute2",
+        "psutil"
     ],
     extras_require={
         "development": [
             "wheel",
             "flake8",
             "pylint",
+            "pytest",
+            "pytest-asyncio",
+            "pytest-cov",
         ]
     },
     packages=find_namespace_packages(include=["proton.vpn.daemon*"]),

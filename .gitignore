@@ -7,3 +7,6 @@ venv
 dist
 debian/changelog
 build
+CHANGELOG.md
+rpmbuild/SPECS/package.spec
+.coverage
