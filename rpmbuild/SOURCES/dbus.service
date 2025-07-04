@@ -1,5 +1,5 @@
 [D-BUS Service]
-Name=me.proton.VPN
+Name=me.proton.vpn.split_tunneling
 Exec=/bin/false
 User=root
 SystemdService=proton.VPN.service

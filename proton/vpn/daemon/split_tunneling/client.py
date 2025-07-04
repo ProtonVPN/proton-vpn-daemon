@@ -39,7 +39,7 @@ class SplitTunnelingDbusClient(SplitTunneling):
         self._interface = interface
 
     @staticmethod
-    async def init(uid: int) -> SplitTunnelingDbusClient:
+    async def build(uid: int) -> SplitTunnelingDbusClient:
         """Initializes the daemon.
 
         Returns:
@@ -48,17 +48,17 @@ class SplitTunnelingDbusClient(SplitTunneling):
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         try:
             introspection = await bus.introspect(
-                "me.proton.VPN", "/me/proton/VPN"
+                "me.proton.vpn.split_tunneling", "/me/proton/vpn/split_tunneling"
             )
         except dbus_fast.errors.DBusError as excp:
             raise exceptions.SplitTunnelingError(
                 "Unable to start introspection"
             ) from excp
         obj = bus.get_proxy_object(
-            "me.proton.VPN", "/me/proton/VPN", introspection
+            "me.proton.vpn.split_tunneling", "/me/proton/vpn/split_tunneling", introspection
         )
         return SplitTunnelingDbusClient(
-            uid=uid, interface=obj.get_interface("me.proton.VPN")
+            uid=uid, interface=obj.get_interface("me.proton.vpn.split_tunneling")
         )
 
     async def set_config(self, config: SplitTunnelingConfig) -> None:
@@ -166,7 +166,7 @@ class SplitTunnelingDbusClient(SplitTunneling):
                     "/usr/bin/systemctl",
                     "is-active",
                     "--quiet",
-                    "me.proton.VPN"
+                    "me.proton.vpn.split_tunneling"
                 ],
                 stderr=subprocess.STDOUT
             )

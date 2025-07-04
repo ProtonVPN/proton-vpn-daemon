@@ -19,7 +19,9 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from enum import Enum, auto
+from pathlib import Path
+from typing import Callable, Optional
 from importlib.metadata import version
 
 import asyncio
@@ -42,6 +44,13 @@ else:
     from pyroute2.netlink.connector import cn_proc  # pylint: disable=E0401,E0611
 
 
+class ProcessEvent(Enum):
+    "Type of process events."
+    EXEC = auto()
+    FORK = auto()
+    EXIT = auto()
+
+
 @dataclass
 class Process:
     """
@@ -62,9 +71,9 @@ class Process:
         exe = ""
         try:
             exe = process.exe()
-        except psutil.AccessDenied as error:
+        except (psutil.AccessDenied, psutil.ZombieProcess) as error:
             # Even when running as root, some processes raise this
-            logger.warning("Access denied getting process path %s", error)
+            logger.warning("Error getting process path: %s: %s", type(error).__name__, error)
 
         return Process(
             pid=process.pid, uid=uid, ppid=ppid, exe=exe
@@ -106,10 +115,14 @@ class ProcessMonitor:
         self._stop_requested = False
         self._tracked_procs: dict[int, psutil.Process] = {}
 
-    def start(self, config_by_uid: dict[int, SplitTunnelingConfig]) -> asyncio.Task:
+    def start(
+            self, config_by_uid: dict[int, SplitTunnelingConfig],
+            process_match_callback: Callable[[ProcessEvent, Process], None]
+    ) -> asyncio.Task:
         """
         Starts a background task to monitor processes.
-        @config_by_uid: map of split tunneling configuration by uid (unix user id)
+        @param config_by_uid: map of split tunneling configuration by uid (unix user id)
+        @param process_match_callback: callback called whenever there is a process match.
 
         Note that this method returns straight away, it doesn't wait that
         the background task is running.
@@ -118,7 +131,9 @@ class ProcessMonitor:
             raise RuntimeError("Process monitoring background task already running")
 
         logger.info("Starting process monitor")
-        self._background_task = asyncio.create_task(self._run_async(config_by_uid))
+        self._background_task = asyncio.create_task(
+            self._run_async(config_by_uid, process_match_callback)
+        )
         return self._background_task
 
     async def stop(self):
@@ -139,17 +154,29 @@ class ProcessMonitor:
         self.__init__()  # pylint: disable=C2801
         logger.info("Process monitor stopped")
 
-    async def restart(self, config_by_uid: dict[int, SplitTunnelingConfig]):
+    async def restart(
+            self, config_by_uid: dict[int, SplitTunnelingConfig],
+            process_match_callback: Callable[[ProcessEvent, Process], None]
+    ):
         """Stops and starts the process monitoring background task again."""
         await self.stop()
-        self.start(config_by_uid)
+        self.start(config_by_uid, process_match_callback)
 
-    async def _run_async(self, config_by_uid: dict[int, SplitTunnelingConfig]):
+    async def _run_async(
+            self, config_by_uid: dict[int, SplitTunnelingConfig],
+            process_match_callback: Callable[[ProcessEvent, Process], None]
+    ):
         await asyncio.get_running_loop()\
-            .run_in_executor(None, self._run_sync, config_by_uid)
+            .run_in_executor(None, self._run_sync, config_by_uid, process_match_callback)
 
-    def _run_sync(self, config_by_uid: dict[int, SplitTunnelingConfig]):
-        self._track_existing_processes(config_by_uid)
+    def _run_sync(
+            self, config_by_uid: dict[int, SplitTunnelingConfig],
+            process_match_callback: Callable[[ProcessEvent, Process], None]
+
+    ):
+        self._resolve_symlinks(config_by_uid)
+
+        self._track_existing_processes(config_by_uid, process_match_callback)
 
         # start listening for process events via the connector netlink protocol
         self._socket = cn_proc.ProcEventSocket()
@@ -165,9 +192,15 @@ class ProcessMonitor:
                 raise
 
             for event in events:
-                self._process_proc_event(event, config_by_uid)
+                self._process_proc_event(event, config_by_uid, process_match_callback)
 
-    def _track_existing_processes(self, config_by_uid):
+    def _resolve_symlinks(self, config_by_uid):
+        for config in config_by_uid.values():
+            config.app_paths = [str(Path(path).resolve()) for path in config.app_paths]
+
+        logger.info("Settings after resolving symlinks %s", config_by_uid)
+
+    def _track_existing_processes(self, config_by_uid, process_match_callback):
         start = time.time_ns()
 
         for proc in psutil.process_iter():
@@ -177,16 +210,16 @@ class ProcessMonitor:
 
             if _process_match(process, config_by_uid):
                 self._tracked_procs[process.pid] = process
-                self._on_process_match(process)
+                process_match_callback(ProcessEvent.EXEC, process)
 
                 for child in proc.children(recursive=True):
                     child = Process.from_psutil(child)
                     self._tracked_procs[child.pid] = child
-                    self._on_process_forked(child)
+                    process_match_callback(ProcessEvent.FORK, child)
 
         logger.info("Existing processes inspected in %d ms", (time.time_ns() - start) // 1_000_000)
 
-    def _process_proc_event(self, event, config_by_uid):
+    def _process_proc_event(self, event, config_by_uid, process_match_callback):
         if isinstance(event, cn_proc.proc_event_exec):
             pid = event["process_pid"]
             if pid in self._tracked_procs:
@@ -196,7 +229,7 @@ class ProcessMonitor:
             process = _get_process(pid)
             if _process_match(process, config_by_uid):
                 self._tracked_procs[pid] = process
-                self._on_process_match(process)
+                process_match_callback(ProcessEvent.EXEC, process)
         elif isinstance(event, cn_proc.proc_event_fork):
             parent_pid = event["parent_pid"]
             if parent_pid in self._tracked_procs:
@@ -208,52 +241,55 @@ class ProcessMonitor:
                     return
 
                 self._tracked_procs[pid] = process
-                self._on_process_forked(process)
+                process_match_callback(ProcessEvent.FORK, process)
         elif isinstance(event, cn_proc.proc_event_exit):
             pid = event["process_pid"]
             if pid in self._tracked_procs:
                 process = self._tracked_procs[pid]
-                self._on_process_exit(process)
+                process_match_callback(ProcessEvent.EXIT, process)
                 del self._tracked_procs[pid]
 
-    def _on_process_match(self, process: psutil.Process):
-        logger.info("Process match: pid=%s, path=%s", process.pid, process.exe)
 
-    def _on_process_forked(self, process: psutil.Process):
-        logger.info(
-            "Process forked: ppid=%s, pid=%s, path=%s",
-            process.ppid, process.pid, process.exe
-        )
-
-    def _on_process_exit(self, process: psutil.Process):
-        logger.info("Process exited: pid=%s", process.pid)
-
-
-async def main():
-    """Test"""
+def build_process_monitor_cli_parser(name: str):
+    """Builds the process monitor CLI arg parser"""
     import argparse  # pylint: disable=C0415
-    import os  # pylint: disable=C0415
-
-    root_logger = logging.getLogger()
-    root_logger.addHandler(logging.StreamHandler())
 
     parser = argparse.ArgumentParser(
-        prog='Process monitor for app-based Split Tunneling',
-        description='For testing purposes only.'
+        prog=name,
+        description="For testing purposes only"
     )
     parser.add_argument(
         "-p", "--path", required=True, action="append",
         help="Process paths to exclude."
     )
     parser.add_argument("--uid", required=False, type=int, help="UID to exclude process for.")
+
+    return parser
+
+
+async def main():
+    """Test script"""
+    import os  # pylint: disable=C0415
+
+    root_logger = logging.getLogger()
+    root_logger.addHandler(logging.StreamHandler())
+
+    parser = build_process_monitor_cli_parser(
+        name="Process monitor for app-based Split Tunneling"
+    )
     args = parser.parse_args()
 
     process_monitor = ProcessMonitor()
     uid = args.uid or os.getuid()
     try:
-        await process_monitor.start(config_by_uid={
-            uid: SplitTunnelingConfig(app_paths=args.path)
-        })
+        await process_monitor.start(
+            config_by_uid={
+                uid: SplitTunnelingConfig(app_paths=args.path)
+            },
+            process_match_callback=lambda event, process: logger.info(
+                "event: %s, process: %s", event, process
+            )
+        )
     except asyncio.CancelledError:
         pass
     finally:
@@ -264,4 +300,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main(), debug=True)
+    asyncio.run(main())

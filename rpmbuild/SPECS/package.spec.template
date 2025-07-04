@@ -1,11 +1,11 @@
 %define unmangled_name proton-vpn-daemon
 %define version {version}
 %define src_dbus_service dbus.service
-%define dst_dbus_service me.proton.VPN.service
+%define dst_dbus_service me.proton.vpn.split_tunneling.service
 %define src_systemd_service systemd.service
-%define dst_systemd_service me.proton.VPN.service
+%define dst_systemd_service me.proton.vpn.split_tunneling.service
 %define src_introspection_xml dbus.conf
-%define dst_introspection_xml me.proton.VPN.conf
+%define dst_introspection_xml me.proton.vpn.split_tunneling.conf
 %define release 1
 
 Prefix: %{{_prefix}}
@@ -33,6 +33,9 @@ BuildRequires: python3-dbus-fast
 BuildRequires: python3-packaging
 BuildRequires: python3-systemd
 BuildRequires: python3-pyroute2
+BuildRequires: python3-bcc
+BuildRequires: python3-psutil
+BuildRequires: wireguard-tools
 BuildRequires: python3-proton-vpn-api-core > 0.44.0
 
 Requires: systemd
@@ -40,6 +43,9 @@ Requires: python3-dbus-fast
 Requires: python3-packaging
 Requires: python3-systemd
 Requires: python3-pyroute2
+Requires: python3-bcc
+Requires: python3-psutil
+Requires: wireguard-tools
 Requires: python3-proton-vpn-api-core > 0.44.0
 
 %description

@@ -21,7 +21,7 @@ import logging
 from typing import Optional
 from proton.vpn.core.settings import SplitTunnelingConfig
 
-from proton.vpn.daemon.split_tunneling.apps.process_monitor import ProcessMonitor
+from proton.vpn.daemon.split_tunneling.apps.service import AppBasedSplitTunnelingService
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,10 @@ class SplitTunnelingService:
     def __init__(
             self,
             config_by_uid: Optional[dict[int, SplitTunnelingConfig]] = None,
-            process_monitor: Optional[ProcessMonitor] = None
+            app_service: Optional[AppBasedSplitTunnelingService] = None
     ):
         self._config_by_uid = config_by_uid or {}
-        self._process_monitor = process_monitor or ProcessMonitor()
+        self._app_service = app_service or AppBasedSplitTunnelingService()
         self._lock = asyncio.Lock()
 
     async def set_config(self, uid: int, config: SplitTunnelingConfig):
@@ -47,7 +47,7 @@ class SplitTunnelingService:
         async with self._lock:
             logger.info("Setting %s for user %s", config, uid)
             self._config_by_uid[uid] = config
-            await self._update_process_monitor()
+            await self._app_service.restart(self._config_by_uid)
 
     async def clear_config(self, uid: int):
         """
@@ -58,7 +58,7 @@ class SplitTunnelingService:
             logger.info("Clearing config for user %s", uid)
             if uid in self._config_by_uid:
                 del self._config_by_uid[uid]
-                await self._update_process_monitor()
+                await self._app_service.restart(self._config_by_uid)
 
     def get_config(self, uid: int) -> Optional[SplitTunnelingConfig]:
         """
@@ -75,15 +75,3 @@ class SplitTunnelingService:
             and the split tunneling configuration, in this order.
         """
         return list(self._config_by_uid.items())
-
-    def _is_app_based_config(self, config_by_uid: dict[int, SplitTunnelingConfig]) -> bool:
-        return any(
-            any(path for path in config.app_paths)  # any non empty path
-            for config in config_by_uid.values()    # on any user config
-        )
-
-    async def _update_process_monitor(self):
-        if self._is_app_based_config(self._config_by_uid):
-            await self._process_monitor.restart(self._config_by_uid)
-        else:
-            await self._process_monitor.stop()

@@ -7,6 +7,6 @@ export BUILD_PATH=debian/proton-vpn-daemon
 	dh $@ --with python3 --buildsystem=pybuild
 override_dh_auto_install:
 	dh_auto_install
-	install -D -m 644 rpmbuild/SOURCES/dbus.conf 			$(BUILD_PATH)/etc/dbus-1/system.d/me.proton.VPN.conf
-	install -D -m 644 rpmbuild/SOURCES/dbus.service 		$(BUILD_PATH)/etc/dbus-1/system-services/me.proton.VPN.service
-	install -D -m 644 rpmbuild/SOURCES/systemd.service 		$(BUILD_PATH)/usr/lib/systemd/system/me.proton.VPN.service
+	install -D -m 644 rpmbuild/SOURCES/dbus.conf 			$(BUILD_PATH)/etc/dbus-1/system.d/me.proton.vpn.split_tunneling.conf
+	install -D -m 644 rpmbuild/SOURCES/dbus.service 		$(BUILD_PATH)/etc/dbus-1/system-services/me.proton.vpn.split_tunneling.service
+	install -D -m 644 rpmbuild/SOURCES/systemd.service 		$(BUILD_PATH)/usr/lib/systemd/system/me.proton.vpn.split_tunneling.service

@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=dbus
-BusName=me.proton.VPN
+BusName=me.proton.vpn.split_tunneling
 ExecStart=/usr/bin/proton-vpn-daemon
 Restart=always
 TimeoutStartSec=30

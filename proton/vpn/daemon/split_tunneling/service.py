@@ -48,11 +48,11 @@ class SplitTunnelingDbus(ServiceInterface):
     """
 
     def __init__(self):
-        super().__init__("me.proton.VPN")
+        super().__init__("me.proton.vpn.split_tunneling")
         self.st_service = SplitTunnelingService()
 
     @method(name="SetConfig")
-    async def set_config(self, uid: "q", config: "a{sv}"):  # noqa: F722,F821
+    async def set_config(self, uid: "q", config: "a{sv}"):  # type: ignore # noqa: F722,F821
         """Set split tunneling config
 
         The reason that the `Variant` datatype is used as value for the dict,
@@ -63,15 +63,23 @@ class SplitTunnelingDbus(ServiceInterface):
 
         To pass values to this method, the structure should look like this:
         ```
+            1000,
             {
-                "mode": Variant('s', "standard"),
-                "app_paths": Variant('as', ['path1', 'path2']),
+                "mode": Variant('s', "exclude"),
+                "app_paths": Variant('as', ['/snap/firefox']),
                 "ip_ranges": Variant('as', ['192.168.1.1'])
-            },
-            1000
+            }
         ```
         If you're testing via D-Feet,
-        prefix variants with `GLib.`, ie: `GLib.Variant`
+        prefix variants with `GLib.`, ie:
+        ```
+            1000,
+            {
+                "mode": GLib.Variant('s', "exclude"),
+                "app_paths": GLib.Variant('as', ['/snap/firefox']),
+                "ip_ranges": GLib.Variant('as', ['192.168.1.1'])
+            }
+        ```
 
         Args:
             SplitTunnelingConfig: A dict object that
@@ -86,7 +94,7 @@ class SplitTunnelingDbus(ServiceInterface):
         await self.st_service.set_config(uid, config)
 
     @method(name="GetConfig")
-    async def get_config(self, uid: "q") -> "a{sv}":  # noqa: F722,F821
+    async def get_config(self, uid: "q") -> "a{sv}":  # type: ignore # noqa: F722,F821
         """Returns configuration for specified uid.
 
         Since we can not return different types of data, we return
@@ -114,7 +122,7 @@ class SplitTunnelingDbus(ServiceInterface):
         await self.st_service.clear_config(uid)
 
     @method(name="GetAllConfigs")
-    async def get_all_configs(self) -> "a(qa{sv})":  # noqa: F722
+    async def get_all_configs(self) -> "a(qa{sv})":  # type: ignore # noqa: F722
         """Returns all stored configs
 
         Returns:
@@ -130,5 +138,5 @@ async def init_split_tunneling_daemon():
     """Main method that configures the bus.
     """
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-    _ = await bus.request_name('me.proton.VPN')
-    bus.export('/me/proton/VPN', SplitTunnelingDbus())
+    _ = await bus.request_name('me.proton.vpn.split_tunneling')
+    bus.export('/me/proton/vpn/split_tunneling', SplitTunnelingDbus())
