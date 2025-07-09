@@ -22,7 +22,7 @@ import os
 import re
 import subprocess  # nosec # nosemgrep: gitlab.bandit.B404
 
-from bcc import BPF, BPFAttachType
+from bcc import BPF
 
 from proton.vpn.daemon.split_tunneling.exceptions import WireGuardConnectionNotFound
 
@@ -88,6 +88,7 @@ class SocketMonitor:
             "split_tunnel", self._bpf.CGROUP_SOCK
         )
         self._cgroup = None
+        self._bpf_enum_group = None
 
     def start(self):
         """Starts monitoring sockets."""
@@ -105,7 +106,7 @@ class SocketMonitor:
         self._bpf.attach_func(
             self._bpf_split_tunneling_func,
             self._cgroup,
-            BPFAttachType.CGROUP_INET_SOCK_CREATE
+            self._backwards_compatible_bfp_attach_type.CGROUP_INET_SOCK_CREATE
         )
 
     @property
@@ -139,7 +140,7 @@ class SocketMonitor:
         """
         Stops tracking sockets opened by the specified process process.
         @param pid: the unix id of the process.
-        If the specired process was not being split tunneled then this is a noop.
+        If the specified process was not being split tunneled then this is a noop.
         """
         if not self._started:
             raise RuntimeError("Socket monitor was not started yet")
@@ -159,13 +160,35 @@ class SocketMonitor:
         self._bpf.detach_func(
             self._bpf_split_tunneling_func,
             self._cgroup,
-            BPFAttachType.CGROUP_INET_SOCK_CREATE
+            self._backwards_compatible_bfp_attach_type.CGROUP_INET_SOCK_CREATE
         )
         self._cleanup()
         os.close(self._cgroup)
         self._cgroup = None
 
         logger.info("Socket monitor stopped")
+
+    @property
+    def _backwards_compatible_bfp_attach_type(self) -> object:
+        """In v20 of bcc a refactor was made where enums
+        were extracted into their own type, the BPFAttachType.
+
+        Before that the types were part of the bpf program.
+
+        See more here:
+        https://github.com/iovisor/bcc/commit/2731825b9327a9a720f2ef92ed891ce0525a8dc3
+
+        Returns:
+            object: Either the BPFAttachType or bpf program.
+        """
+        if not self._bpf_enum_group:
+            try:
+                from bcc import BPFAttachType  # pylint: disable=import-outside-toplevel
+                self._bpf_enum_group = BPFAttachType
+            except ImportError:
+                self._bpf_enum_group = self._bpf
+
+        return self._bpf_enum_group
 
 
 def main():
