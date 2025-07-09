@@ -131,8 +131,18 @@ class ProcessMonitor:
             raise RuntimeError("Process monitoring background task already running")
 
         logger.info("Starting process monitor")
+
+        self._resolve_symlinks(config_by_uid)
+
+        self._track_existing_processes(config_by_uid, process_match_callback)
+
+        # start listening for process events via the connector netlink protocol
+        self._socket = cn_proc.ProcEventSocket()
+        self._socket.bind()
+        self._socket.control(listen=True)
+
         self._background_task = asyncio.create_task(
-            self._run_async(config_by_uid, process_match_callback)
+            self._run_socket_read_loop(config_by_uid, process_match_callback)
         )
         return self._background_task
 
@@ -162,26 +172,19 @@ class ProcessMonitor:
         await self.stop()
         self.start(config_by_uid, process_match_callback)
 
-    async def _run_async(
+    async def _run_socket_read_loop(
             self, config_by_uid: dict[int, SplitTunnelingConfig],
             process_match_callback: Callable[[ProcessEvent, Process], None]
     ):
-        await asyncio.get_running_loop()\
-            .run_in_executor(None, self._run_sync, config_by_uid, process_match_callback)
+        await asyncio.get_running_loop().run_in_executor(
+            None, self._run_blocking_socket_read_loop, config_by_uid, process_match_callback
+        )
 
-    def _run_sync(
+    def _run_blocking_socket_read_loop(
             self, config_by_uid: dict[int, SplitTunnelingConfig],
             process_match_callback: Callable[[ProcessEvent, Process], None]
 
     ):
-        self._resolve_symlinks(config_by_uid)
-
-        self._track_existing_processes(config_by_uid, process_match_callback)
-
-        # start listening for process events via the connector netlink protocol
-        self._socket = cn_proc.ProcEventSocket()
-        self._socket.bind()
-        self._socket.control(listen=True)
         while True:
             try:
                 events = self._socket.get()
