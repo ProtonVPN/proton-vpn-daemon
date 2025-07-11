@@ -144,6 +144,8 @@ class ProcessMonitor:
         self._background_task = asyncio.create_task(
             self._run_socket_read_loop(config_by_uid, process_match_callback)
         )
+        # Ensure exceptions are bubbled up and caught by the exception handler
+        self._background_task.add_done_callback(lambda f: f.result())
         return self._background_task
 
     async def stop(self):

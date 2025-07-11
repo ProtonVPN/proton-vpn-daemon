@@ -21,23 +21,33 @@ import logging
 
 from proton.vpn.daemon.split_tunneling.service import \
     init_split_tunneling_daemon
+from proton.vpn.daemon.exception_handler import asyncio_exception_handler
 
-log = logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 async def main():
     """Main method to call daemons.
     """
+
     await init_split_tunneling_daemon()
 
 
 def run_forever():
     """Runs the loop forever
     """
-    log.info("Starting Proton VPN daemon")
+
+    logger.info("Starting Proton VPN daemon")
     loop = asyncio.new_event_loop()
+
+    # Configure the exception handler for asyncio.
+    loop.set_exception_handler(asyncio_exception_handler)
+
     loop.run_until_complete(main())
     loop.run_forever()
+
+    # Restore to original exception handler.
+    loop.set_exception_handler(None)
 
 
 if __name__ == '__main__':

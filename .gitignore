@@ -11,3 +11,4 @@ CHANGELOG.md
 rpmbuild/SPECS/package.spec
 .coverage
 *.changes
+*.buildinfo
