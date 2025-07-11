@@ -18,6 +18,7 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from __future__ import annotations
 from typing import Optional, Union
+import asyncio
 
 from dbus_fast.aio import MessageBus
 from dbus_fast import BusType
@@ -34,9 +35,13 @@ class SplitTunnelingDbusClient(SplitTunneling):
 
     Use this class to talk to our backend daemon.
     """
-    def __init__(self, uid: int, interface: str):
+
+    DEFAULT_TIMEOUT: int = 5
+
+    def __init__(self, uid: int, interface: str, timeout: int = DEFAULT_TIMEOUT):
         super().__init__(uid)
         self._interface = interface
+        self._timeout = timeout
 
     @staticmethod
     async def build(uid: int) -> SplitTunnelingDbusClient:
@@ -72,12 +77,21 @@ class SplitTunnelingDbusClient(SplitTunneling):
         """
         dbus_dict = translator.to_dbus_dict(config)
         try:
-            await self._interface.call_set_config(self._uid, dbus_dict)
+            async with asyncio.timeout(self._timeout):
+                await self._interface.call_set_config(self._uid, dbus_dict)
+        except TimeoutError as exc:
+            raise exceptions.SplitTunnelingError(
+                "Timeout setting split tunnelint configuration"
+            ) from exc
         except dbus_fast.errors.DBusError as excp:
             raise exceptions.SplitTunnelingError(
                 "Error setting new split tunneling "
                 f"configuration for {self._uid}"
             ) from excp
+        except Exception as exc:
+            raise exceptions.SplitTunnelingError(
+                "Unexpected error"
+            ) from exc
 
     async def get_config(self) -> Optional[SplitTunnelingConfig]:
         """Returns config for instance uid.
@@ -94,6 +108,10 @@ class SplitTunnelingDbusClient(SplitTunneling):
             raise exceptions.SplitTunnelingError(
                 f"Error getting split tunneling configuration for {self._uid}"
             ) from excp
+        except Exception as exc:
+            raise exceptions.SplitTunnelingError(
+                "Unexpected error"
+            ) from exc
 
         if not dbus_dict:
             return None
@@ -107,11 +125,20 @@ class SplitTunnelingDbusClient(SplitTunneling):
             exceptions.SplitTunnelingError: whenever there is a dbus exception
         """
         try:
-            await self._interface.call_clear_config(self._uid)
+            async with asyncio.timeout(self._timeout):
+                await self._interface.call_clear_config(self._uid)
+        except TimeoutError as exc:
+            raise exceptions.SplitTunnelingError(
+                "Timeout clearing split tunnelint configuration"
+            ) from exc
         except dbus_fast.errors.DBusError as excp:
             raise exceptions.SplitTunnelingError(
                 f"Error clearing split tunneling config for {self._uid}"
             ) from excp
+        except Exception as exc:
+            raise exceptions.SplitTunnelingError(
+                "Unexpected error"
+            ) from exc
 
     async def get_all_configs(
             self

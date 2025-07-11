@@ -49,7 +49,7 @@ class SplitTunnelingDbus(ServiceInterface):
 
     def __init__(self):
         super().__init__("me.proton.vpn.split_tunneling")
-        self.st_service = SplitTunnelingService()
+        self._service = SplitTunnelingService()
 
     @method(name="SetConfig")
     async def set_config(self, uid: "q", config: "a{sv}"):  # type: ignore # noqa: F722,F821
@@ -91,7 +91,7 @@ class SplitTunnelingDbus(ServiceInterface):
             uid: `q` is a uint16
         """
         config: SplitTunnelingConfig = translator.from_dbus_dict(config)
-        await self.st_service.set_config(uid, config)
+        await self._service.set_config(uid, config)
 
     @method(name="GetConfig")
     async def get_config(self, uid: "q") -> "a{sv}":  # type: ignore # noqa: F722,F821
@@ -109,7 +109,7 @@ class SplitTunnelingDbus(ServiceInterface):
 
             It can also return an array with empty values.
         """
-        config = self.st_service.get_config(uid)
+        config = self._service.get_config(uid)
         return translator.to_dbus_dict(config) if config else {}
 
     @method(name="ClearConfig")
@@ -119,7 +119,7 @@ class SplitTunnelingDbus(ServiceInterface):
         Args:
             uid (uint16): uid of the user
         """
-        await self.st_service.clear_config(uid)
+        await self._service.clear_config(uid)
 
     @method(name="GetAllConfigs")
     async def get_all_configs(self) -> "a(qa{sv})":  # type: ignore # noqa: F722
@@ -130,7 +130,7 @@ class SplitTunnelingDbus(ServiceInterface):
         """
         return [
             (uid, translator.to_dbus_dict(config))
-            for uid, config in self.st_service.get_all_configs()
+            for uid, config in self._service.get_all_configs()
         ]
 
 

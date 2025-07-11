@@ -43,10 +43,10 @@ class AppBasedSplitTunnelingService:
         logger.info("Process match: event=%s, process=%s", event, process)
         if event in (ProcessEvent.EXEC, ProcessEvent.FORK):
             logger.info("Removing pid %d from VPN", process.pid)
-            self._socket_monitor.remove_process_from_vpn(process.pid)
+            self._socket_monitor.exclude_process_from_vpn(process.pid)
         elif event == ProcessEvent.EXIT:
             logger.info("Forgetting pid %d", process.pid)
-            self._socket_monitor.forget_process(process.pid)
+            self._socket_monitor.stop_tracking_process(process.pid)
         else:
             logger.error("Unexpected event: %s", event)
 

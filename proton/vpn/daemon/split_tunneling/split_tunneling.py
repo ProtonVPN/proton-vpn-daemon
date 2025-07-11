@@ -35,7 +35,7 @@ class SplitTunnelingService:
             app_service: Optional[AppBasedSplitTunnelingService] = None
     ):
         self._config_by_uid = config_by_uid or {}
-        self._app_service = app_service or AppBasedSplitTunnelingService()
+        self._app_split_tunneling = app_service or AppBasedSplitTunnelingService()
         self._lock = asyncio.Lock()
 
     async def set_config(self, uid: int, config: SplitTunnelingConfig):
@@ -47,7 +47,7 @@ class SplitTunnelingService:
         async with self._lock:
             logger.info("Setting %s for user %s", config, uid)
             self._config_by_uid[uid] = config
-            await self._app_service.restart(self._config_by_uid)
+            await self._app_split_tunneling.restart(self._config_by_uid)
 
     async def clear_config(self, uid: int):
         """
@@ -58,7 +58,7 @@ class SplitTunnelingService:
             logger.info("Clearing config for user %s", uid)
             if uid in self._config_by_uid:
                 del self._config_by_uid[uid]
-                await self._app_service.restart(self._config_by_uid)
+                await self._app_split_tunneling.restart(self._config_by_uid)
 
     def get_config(self, uid: int) -> Optional[SplitTunnelingConfig]:
         """
