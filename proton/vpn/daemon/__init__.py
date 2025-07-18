@@ -16,10 +16,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-import logging
-from systemd.journal import JournalHandler
+from proton.vpn import logging
 
-logger = logging.getLogger()
-
-logger.addHandler(JournalHandler())
-logger.setLevel(logging.INFO)
+logging.config(filename="vpn-daemon")

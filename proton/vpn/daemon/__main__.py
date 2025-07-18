@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 import asyncio
-import logging
 
+from proton.vpn import logging
 from proton.vpn.daemon.split_tunneling.service import \
     init_split_tunneling_daemon
 from proton.vpn.daemon.exception_handler import asyncio_exception_handler

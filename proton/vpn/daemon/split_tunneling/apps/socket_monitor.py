@@ -17,13 +17,13 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 import ctypes
-import logging
 import os
 import re
 import subprocess  # nosec # nosemgrep: gitlab.bandit.B404
 
 from bcc import BPF
 
+from proton.vpn import logging
 from proton.vpn.daemon.split_tunneling.exceptions import WireGuardConnectionNotFound
 
 

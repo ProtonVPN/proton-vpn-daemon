@@ -17,13 +17,13 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 import asyncio
-import logging
 from typing import Awaitable
 
 from proton.vpn.daemon.split_tunneling.apps.process_monitor import \
     Process, ProcessEvent, ProcessMonitor
 from proton.vpn.daemon.split_tunneling.apps.socket_monitor import SocketMonitor
 
+from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig
 
 from proton.vpn.daemon.split_tunneling.exceptions import WireGuardConnectionNotFound
@@ -93,9 +93,6 @@ async def main():
     import os  # pylint: disable=C0415
     import sys  # pylint: disable=C0415
     from proton.vpn.core.settings import SplitTunnelingMode  # pylint: disable=C0415
-
-    root_logger = logging.getLogger()
-    root_logger.addHandler(logging.StreamHandler())
 
     from proton.vpn.daemon.split_tunneling.apps.process_monitor import \
         build_process_monitor_cli_parser  # pylint: disable=C0415

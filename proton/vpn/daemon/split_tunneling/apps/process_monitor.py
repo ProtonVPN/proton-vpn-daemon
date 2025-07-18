@@ -26,12 +26,12 @@ from importlib.metadata import version
 
 import asyncio
 import errno
-import logging
 import time
 
 from packaging.version import Version
 import psutil
 
+from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig
 
 logger = logging.getLogger(__name__)
@@ -275,9 +275,6 @@ def build_process_monitor_cli_parser(name: str):
 async def main():
     """Test script"""
     import os  # pylint: disable=C0415
-
-    root_logger = logging.getLogger()
-    root_logger.addHandler(logging.StreamHandler())
 
     parser = build_process_monitor_cli_parser(
         name="Process monitor for app-based Split Tunneling"
