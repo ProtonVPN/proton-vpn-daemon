@@ -16,6 +16,16 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
+import sys
 from proton.vpn import logging
 
-logging.config(filename="vpn-daemon")
+# Only configure logging if this module is being run as the main daemon
+if (
+    __name__ == "__main__" or  # Direct execution
+    "proton-vpn-daemon" in sys.argv[0]  # Daemon script
+):
+    logging.config(filename="vpn-daemon")
+else:
+    # We're being imported by another process
+    # Don't configure logging - let the importing process handle it
+    pass

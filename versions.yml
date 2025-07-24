@@ -1,5 +1,14 @@
+version: 0.10.1
+time: 2025/07/24 12:36
+author: Alexandru Cheltuitor
+email: alexandru.cheltuitor@proton.ch
+urgency: low
+stability: unstable
+description:
+- "fix: only configure loggin if being module is created from own process"
+---
 version: 0.10.0
-time: 2025/07/15 16:22
+time: 2025/07/17 16:22
 author: Pep Llaneras
 email: josep.llaneras@proton.ch
 urgency: low
