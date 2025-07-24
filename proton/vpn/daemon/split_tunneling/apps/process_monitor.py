@@ -17,18 +17,16 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, Optional
-from importlib.metadata import version
 
 import asyncio
-import errno
 import time
 
-from packaging.version import Version
+from bcc import BPF
 import psutil
 
 from proton.vpn import logging
@@ -36,19 +34,22 @@ from proton.vpn.core.settings import SplitTunnelingConfig
 
 logger = logging.getLogger(__name__)
 
-if Version(version("pyroute2")) < Version("0.7.11"):
-    # pyroute2 does not include connector netlink portocol in older versions.
-    from .pyroute2.netlink.connector import cn_proc
-    logger.warning("Using pyroute2 fallback")
-else:
-    from pyroute2.netlink.connector import cn_proc  # pylint: disable=E0401,E0611
+BPF_PROGRAM_PATH = Path(__file__.replace(".py", ".bpf.c"))
 
 
 class ProcessEvent(Enum):
     "Type of process events."
     EXEC = auto()
-    FORK = auto()
+    CLONE = auto()
     EXIT = auto()
+
+
+class PerfBufferEventType(Enum):
+    """Type of events sent to the BPF perf buffer"""
+    EXEC_ARGUMENT = 0
+    EXEC_RETURN = 1
+    CLONE = 2
+    EXIT = 3
 
 
 @dataclass
@@ -110,10 +111,13 @@ class ProcessMonitor:
     """Monitors processes based on the specified Split Tunnelingconfiguration."""
 
     def __init__(self):
-        self._socket: Optional[cn_proc.ProcEventSocket] = None
+        self._bpf: Optional[BPF] = None
         self._background_task: Optional[asyncio.Task] = None
         self._stop_requested = False
         self._tracked_procs: dict[int, psutil.Process] = {}
+        self._argv = defaultdict(list)
+        self._config_by_uid: Optional[dict[int, SplitTunnelingConfig]] = None
+        self._process_match_callback: Callable[[ProcessEvent, Process], None] = None
 
     def start(
             self, config_by_uid: dict[int, SplitTunnelingConfig],
@@ -131,18 +135,16 @@ class ProcessMonitor:
             raise RuntimeError("Process monitoring background task already running")
 
         logger.info("Starting process monitor")
-
-        self._resolve_symlinks(config_by_uid)
-
+        self._config_by_uid = config_by_uid
+        # FIXME: think about what we do with symlinks  # pylint: disable=fixme
+        # self._resolve_symlinks(self._config_by_uid)
+        self._process_match_callback = process_match_callback
         self._track_existing_processes(config_by_uid, process_match_callback)
+        self._attach_bpf()
 
-        # start listening for process events via the connector netlink protocol
-        self._socket = cn_proc.ProcEventSocket()
-        self._socket.bind()
-        self._socket.control(listen=True)
-
+        # start listening for process events via ebpf
         self._background_task = asyncio.create_task(
-            self._run_socket_read_loop(config_by_uid, process_match_callback)
+            self._run_process_monitoring()
         )
         # Ensure exceptions are bubbled up and caught by the exception handler
         self._background_task.add_done_callback(lambda f: f.result())
@@ -159,9 +161,11 @@ class ProcessMonitor:
 
         logger.info("Stopping process monitor")
         self._stop_requested = True
-        if self._socket:
-            self._socket.close()
-        await self._background_task
+        self._detach_bpf()
+        try:
+            await self._background_task
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Unexpected error while monitoring processes")
         # reset object state
         self.__init__()  # pylint: disable=C2801
         logger.info("Process monitor stopped")
@@ -174,30 +178,33 @@ class ProcessMonitor:
         await self.stop()
         self.start(config_by_uid, process_match_callback)
 
-    async def _run_socket_read_loop(
-            self, config_by_uid: dict[int, SplitTunnelingConfig],
-            process_match_callback: Callable[[ProcessEvent, Process], None]
-    ):
+    def _attach_bpf(self):
+        with open(BPF_PROGRAM_PATH, "r", encoding="utf-8") as file:
+            bpf_text = file.read()
+
+        self._bpf = BPF(text=bpf_text)
+        execve_fnname = self._bpf.get_syscall_fnname("execve")
+        self._bpf.attach_kprobe(event=execve_fnname, fn_name="syscall__execve")
+        self._bpf.attach_kretprobe(event=execve_fnname, fn_name="do_ret_sys_execve")
+        self._bpf.attach_tracepoint(tp="sched:sched_process_fork", fn_name="tracepoint_fork")
+        self._bpf.attach_tracepoint(tp="sched:sched_process_exit", fn_name="tracepoint_exit")
+
+    def _detach_bpf(self):
+        execve_fnname = self._bpf.get_syscall_fnname("execve")
+        self._bpf.detach_kprobe(event=execve_fnname, fn_name="syscall__execve")
+        self._bpf.detach_kretprobe(event=execve_fnname, fn_name="do_ret_sys_execve")
+        self._bpf.detach_tracepoint(tp="sched:sched_process_fork")
+        self._bpf.detach_tracepoint(tp="sched:sched_process_exit")
+
+    async def _run_process_monitoring(self):
         await asyncio.get_running_loop().run_in_executor(
-            None, self._run_blocking_socket_read_loop, config_by_uid, process_match_callback
+            None, self._run_blocking_process_monitoring
         )
 
-    def _run_blocking_socket_read_loop(
-            self, config_by_uid: dict[int, SplitTunnelingConfig],
-            process_match_callback: Callable[[ProcessEvent, Process], None]
-
-    ):
-        while True:
-            try:
-                events = self._socket.get()
-            except OSError as error:
-                if self._stop_requested and error.errno == errno.EBADF:
-                    # socket closed after shutdown request
-                    break
-                raise
-
-            for event in events:
-                self._process_proc_event(event, config_by_uid, process_match_callback)
+    def _run_blocking_process_monitoring(self):
+        self._bpf["events"].open_perf_buffer(self._process_perf_buffer_event)
+        while not self._stop_requested:
+            self._bpf.perf_buffer_poll(timeout=30)  # timeout in ms
 
     def _resolve_symlinks(self, config_by_uid):
         for config in config_by_uid.values():
@@ -220,39 +227,57 @@ class ProcessMonitor:
                 for child in proc.children(recursive=True):
                     child = Process.from_psutil(child)
                     self._tracked_procs[child.pid] = child
-                    process_match_callback(ProcessEvent.FORK, child)
+                    process_match_callback(ProcessEvent.CLONE, child)
 
         logger.info("Existing processes inspected in %d ms", (time.time_ns() - start) // 1_000_000)
 
-    def _process_proc_event(self, event, config_by_uid, process_match_callback):
-        if isinstance(event, cn_proc.proc_event_exec):
-            pid = event["process_pid"]
-            if pid in self._tracked_procs:
-                # forked process that's already being tracked
+    def _process_perf_buffer_event(self, _cpu, data, _size):
+        event = self._bpf["events"].event(data)
+
+        if event.type == PerfBufferEventType.EXEC_ARGUMENT.value:
+            self._argv[event.pid].append(event.argv)
+        elif event.type == PerfBufferEventType.EXEC_RETURN.value:
+            command = b' '.join(self._argv[event.pid]).replace(b'\n', b'\\n').decode('utf-8')
+            try:
+                del self._argv[event.pid]
+            except KeyError:
+                pass
+            self._process_proc_event(
+                ProcessEvent.EXEC,
+                Process(event.uid, event.pid, event.ppid, command)
+            )
+        elif event.type == PerfBufferEventType.CLONE.value:
+            command = event.comm.decode('utf-8')
+            self._process_proc_event(
+                ProcessEvent.CLONE,
+                Process(event.uid, event.pid, event.ppid, command)
+            )
+        elif event.type == PerfBufferEventType.EXIT.value:
+            command = event.comm.decode('utf-8')
+            self._process_proc_event(
+                ProcessEvent.EXIT,
+                Process(event.uid, event.pid, event.ppid, command)
+            )
+
+    def _process_proc_event(self, event: ProcessEvent, process: Process):
+        if event is ProcessEvent.EXEC:
+            if process.pid in self._tracked_procs:
+                # process that's already being tracked running exec syscall
                 return
 
-            process = _get_process(pid)
-            if _process_match(process, config_by_uid):
-                self._tracked_procs[pid] = process
-                process_match_callback(ProcessEvent.EXEC, process)
-        elif isinstance(event, cn_proc.proc_event_fork):
-            parent_pid = event["parent_pid"]
-            if parent_pid in self._tracked_procs:
+            if _process_match(process, self._config_by_uid):
+                self._tracked_procs[process.pid] = process
+                self._process_match_callback(ProcessEvent.EXEC, process)
+        elif event is ProcessEvent.CLONE:
+            if process.ppid in self._tracked_procs:
                 # if the parent pid is already tracked then the child is too
-                pid = event["child_pid"]
-                process = _get_process(pid)
-                if not process:
-                    # the process already exited.
-                    return
-
-                self._tracked_procs[pid] = process
-                process_match_callback(ProcessEvent.FORK, process)
-        elif isinstance(event, cn_proc.proc_event_exit):
-            pid = event["process_pid"]
-            if pid in self._tracked_procs:
-                process = self._tracked_procs[pid]
-                process_match_callback(ProcessEvent.EXIT, process)
-                del self._tracked_procs[pid]
+                self._tracked_procs[process.pid] = process
+                self._process_match_callback(ProcessEvent.CLONE, process)
+        elif event is ProcessEvent.EXIT:
+            if process.pid in self._tracked_procs:
+                process = self._tracked_procs[process.pid]
+                self._process_match_callback(ProcessEvent.EXIT, process)
+                del self._tracked_procs[process.pid]
 
 
 def build_process_monitor_cli_parser(name: str):

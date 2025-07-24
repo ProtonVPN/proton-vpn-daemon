@@ -36,8 +36,7 @@ BPF_HASH(fwmark_map, u32, u32);
 BPF_HASH(pid_map, u32, u32);
 
 int split_tunnel(struct bpf_sock *sk) {
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = (u32)(pid_tgid >> 32);
+    u32 pid = bpf_get_current_pid_tgid();
 
     u32 fwmark_key = 1;
     u32 *fwmark = fwmark_map.lookup(&fwmark_key);

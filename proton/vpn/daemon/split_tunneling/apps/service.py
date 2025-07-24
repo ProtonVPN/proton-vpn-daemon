@@ -41,7 +41,7 @@ class AppBasedSplitTunnelingService:
 
     def _on_process_event(self, event: ProcessEvent, process: Process):
         logger.info("Process match: event=%s, process=%s", event, process)
-        if event in (ProcessEvent.EXEC, ProcessEvent.FORK):
+        if event in (ProcessEvent.EXEC, ProcessEvent.CLONE):
             logger.info("Removing pid %d from VPN", process.pid)
             self._socket_monitor.exclude_process_from_vpn(process.pid)
         elif event == ProcessEvent.EXIT:

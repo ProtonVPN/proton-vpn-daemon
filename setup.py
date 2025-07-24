@@ -17,9 +17,7 @@ setup(
     install_requires=[
         "dbus-fast",
         "systemd-python",
-        "packaging",
         "proton-vpn-api-core",
-        "pyroute2",
         "psutil"
     ],
     extras_require={
@@ -30,9 +28,11 @@ setup(
             "pytest",
             "pytest-asyncio",
             "pytest-cov",
+            "packaging",
         ]
     },
     packages=find_namespace_packages(include=["proton.vpn.daemon*"]),
+    package_data={'': ['*.bpf.c']},
     include_package_data=True,
     python_requires=">=3.9",
     license="GPLv3",
