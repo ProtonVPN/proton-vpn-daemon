@@ -19,6 +19,7 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 from typing import Optional, Union
 import asyncio
+import sys
 
 from dbus_fast.aio import MessageBus
 from dbus_fast import BusType
@@ -28,6 +29,25 @@ from proton.vpn.daemon.split_tunneling import dbus_translator as translator
 from proton.vpn.core.settings import SplitTunnelingConfig
 from proton.vpn.split_tunneling import exceptions
 from proton.vpn.split_tunneling import SplitTunneling
+
+is_python_3_11_or_higher = sys.version_info >= (3, 11)
+
+
+async def _backwards_compatible_asyncio_timeout(timeout: int, func, *args):
+    """
+    Helper function to maintain compatibility across Python versions.
+
+    Python 3.11 introduced `asyncio.timeout`, which is a context manager that
+    can be used to set a timeout for an asynchronous operation. In earlier
+    versions of Python, we used `asyncio.wait_for` to achieve similar functionality.
+    """
+    if is_python_3_11_or_higher:
+        async with asyncio.timeout(timeout):
+            await func(*args)
+    else:
+        await asyncio.wait_for(
+            func(*args), timeout=timeout
+        )
 
 
 class SplitTunnelingDbusClient(SplitTunneling):
@@ -77,8 +97,11 @@ class SplitTunnelingDbusClient(SplitTunneling):
         """
         dbus_dict = translator.to_dbus_dict(config)
         try:
-            async with asyncio.timeout(self._timeout):
-                await self._interface.call_set_config(self._uid, dbus_dict)
+            await _backwards_compatible_asyncio_timeout(
+                self._timeout,
+                self._interface.call_set_config,
+                self._uid, dbus_dict
+            )
         except TimeoutError as exc:
             raise exceptions.SplitTunnelingError(
                 "Timeout setting split tunnelint configuration"
@@ -125,8 +148,11 @@ class SplitTunnelingDbusClient(SplitTunneling):
             exceptions.SplitTunnelingError: whenever there is a dbus exception
         """
         try:
-            async with asyncio.timeout(self._timeout):
-                await self._interface.call_clear_config(self._uid)
+            await _backwards_compatible_asyncio_timeout(
+                self._timeout,
+                self._interface.call_clear_config,
+                self._uid
+            )
         except TimeoutError as exc:
             raise exceptions.SplitTunnelingError(
                 "Timeout clearing split tunnelint configuration"
