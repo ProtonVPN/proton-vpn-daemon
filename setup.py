@@ -18,7 +18,8 @@ setup(
         "dbus-fast",
         "systemd-python",
         "proton-vpn-api-core",
-        "psutil"
+        "psutil",
+        "packaging",
     ],
     extras_require={
         "development": [
@@ -28,7 +29,6 @@ setup(
             "pytest",
             "pytest-asyncio",
             "pytest-cov",
-            "packaging",
         ]
     },
     packages=find_namespace_packages(include=["proton.vpn.daemon*"]),

@@ -20,10 +20,13 @@ from __future__ import annotations
 from typing import Optional, Union
 import asyncio
 import sys
+import subprocess  # nosec B404 # nosemgrep: gitlab.bandit.B404
 
 from dbus_fast.aio import MessageBus
 from dbus_fast import BusType
 import dbus_fast
+from bcc import __version__ as bcc_version
+from packaging import version
 
 from proton.vpn.daemon.split_tunneling import dbus_translator as translator
 from proton.vpn.core.settings import SplitTunnelingConfig
@@ -211,8 +214,6 @@ class SplitTunnelingDbusClient(SplitTunneling):
         Determines whether the split tunneling connection
         implementation is valid or not.
         """
-        import subprocess  # noqa: E501 # pylint: disable=import-outside-toplevel # nosec B404 # nosemgrep: gitlab.bandit.B404
-
         try:
             subprocess.check_output(  # nosec B603
                 [
@@ -224,6 +225,11 @@ class SplitTunnelingDbusClient(SplitTunneling):
                 stderr=subprocess.STDOUT
             )
         except subprocess.CalledProcessError:
+            return False
+
+        # Check if the BCC version is at least 0.26.0
+        # This is necessary for the split tunneling to work correctly.
+        if version.parse(bcc_version) < version.parse("0.26.0"):
             return False
 
         return True

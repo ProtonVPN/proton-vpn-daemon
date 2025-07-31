@@ -32,6 +32,7 @@ BuildRequires: systemd
 BuildRequires: python3-dbus-fast
 BuildRequires: python3-bcc
 BuildRequires: python3-psutil
+BuildRequires: python3-packaging
 BuildRequires: wireguard-tools
 BuildRequires: python3-proton-vpn-api-core > 0.44.0
 
@@ -39,6 +40,7 @@ Requires: systemd
 Requires: python3-dbus-fast
 Requires: python3-bcc
 Requires: python3-psutil
+Requires: python3-packaging
 Requires: wireguard-tools
 Requires: python3-proton-vpn-api-core > 0.44.0
 
