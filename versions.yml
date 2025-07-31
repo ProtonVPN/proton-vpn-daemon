@@ -1,3 +1,12 @@
+version: 0.11.2
+time: 2025/07/31 15:34
+author: Alexandru Cheltuitor
+email: alexandru.cheltuitor@proton.ch
+urgency: low
+stability: unstable
+description:
+- "fix: remove cli command."
+---
 version: 0.11.1
 time: 2025/07/31 11:01
 author: Alexandru Cheltuitor

@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=dbus
 BusName=me.proton.vpn.split_tunneling
-ExecStart=/usr/bin/proton-vpn-daemon
+ExecStart=/usr/bin/python3 -m proton.vpn.daemon
 Restart=always
 TimeoutStartSec=30
 

@@ -47,9 +47,6 @@ setup(
         "Topic :: Security",
     ],
     entry_points={
-        "console_scripts": [
-            ["proton-vpn-daemon = proton.vpn.daemon.__main__:run_forever"],
-        ],
         "proton_loader_split_tunneling": [
             "split_tunneling_service = proton.vpn.daemon.split_tunneling:SplitTunnelingDbusClient",  # noqa: E501
         ],
