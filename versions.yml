@@ -1,3 +1,12 @@
+version: 0.12.0
+time: 2025/08/01 11:05
+author: Alexandru Cheltuitor
+email: alexandru.cheltuitor@proton.ch
+urgency: low
+stability: unstable
+description:
+- "fix: ensure logging is configured"
+---
 version: 0.11.2
 time: 2025/07/31 15:34
 author: Alexandru Cheltuitor
