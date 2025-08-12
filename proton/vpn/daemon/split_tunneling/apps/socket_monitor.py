@@ -16,6 +16,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
+from typing import Optional
 import ctypes
 import os
 import re
@@ -24,10 +25,11 @@ import subprocess  # nosec # nosemgrep: gitlab.bandit.B404
 from bcc import BPF
 
 from proton.vpn import logging
-from proton.vpn.daemon.split_tunneling.exceptions import WireGuardConnectionNotFound
-
 
 logger = logging.getLogger(__name__)
+
+
+_FWMARK_MAP_KEY = ctypes.c_int32(1)
 
 
 # ebpf program to split traffic based on PID map
@@ -53,7 +55,7 @@ int split_tunnel(struct bpf_sock *sk) {
 """
 
 
-def _get_wireguard_fwmark(interface):
+def _get_wireguard_fwmark(interface) -> Optional[int]:
     # FIXME: get fwmark via D-Bus from NetworkManager  # pylint: disable=fixme
     #  instead of with sudo wg show. The WG backend could somehow make it available?
     try:
@@ -66,11 +68,12 @@ def _get_wireguard_fwmark(interface):
             fwmark_int = int(fwmark_hex, 16)
             return fwmark_int
 
-        raise WireGuardConnectionNotFound(
+        raise RuntimeError(
             f"Couldn't get fwmark from interface {interface}: \n\n{result.stdout}"
         )
-    except subprocess.CalledProcessError as error:
-        raise WireGuardConnectionNotFound(f"VPN interface {interface} not found.") from error
+    except subprocess.CalledProcessError:
+        # `wg show proton0` failed: the user is not connected to the VPN
+        return None
 
 
 class SocketMonitor:
@@ -89,15 +92,26 @@ class SocketMonitor:
         self._cgroup = None
         self._bpf_enum_group = None
 
+    def log_status(self):
+        """Logs the socket monitor status."""
+        logger.info("==============Socket monitor status==================")
+        logger.info("Tracked PIDs: %s", [key.value for key in self._bpf_pid_map.keys()])
+        logger.info("fwmark: %s", self._bpf_fwmark_map.get(_FWMARK_MAP_KEY))
+        logger.info("=====================================================")
+
     def start(self):
         """Starts monitoring sockets."""
-        logger.info("Starting socket monitor")
-
-        self._cleanup()
-
         fwmark = _get_wireguard_fwmark(self.WIREGUARD_INTERFACE_NAME)
-        self._bpf_fwmark_map[ctypes.c_int32(1)] = ctypes.c_int32(fwmark)
+        if fwmark is not None:
+            self._bpf_fwmark_map[_FWMARK_MAP_KEY] = ctypes.c_int32(fwmark)
+        elif _FWMARK_MAP_KEY in self._bpf_fwmark_map:
+            del self._bpf_fwmark_map[_FWMARK_MAP_KEY]
 
+        if self._started:
+            logger.info("Socket monitor already running: fwmark updated to %s", fwmark)
+            return
+
+        logger.info("Starting socket monitor (with fwmark %s)", fwmark)
         self._cgroup = os.open("/sys/fs/cgroup/user.slice", os.O_RDONLY)
 
         # attach the ST eBPF function to the cgroup/sock_create event

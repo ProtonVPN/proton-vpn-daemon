@@ -25,9 +25,12 @@ from dbus_fast.aio import MessageBus
 from dbus_fast.service import ServiceInterface, method
 from dbus_fast import BusType
 
+from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig
 from proton.vpn.daemon.split_tunneling import dbus_translator as translator
 from proton.vpn.daemon.split_tunneling.split_tunneling import SplitTunnelingService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -120,6 +123,11 @@ class SplitTunnelingDbus(ServiceInterface):
             uid (uint16): uid of the user
         """
         await self._service.clear_config(uid)
+
+    @method(name="LogStatus")
+    def log_status(self):
+        """Logs the service status."""
+        self._service.log_status()
 
     @method(name="GetAllConfigs")
     async def get_all_configs(self) -> "a(qa{sv})":  # type: ignore # noqa: F722

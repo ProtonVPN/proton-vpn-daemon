@@ -48,7 +48,11 @@ class SplitTunnelingService:
         async with self._lock:
             logger.info("Setting %s for user %s", config, uid)
             self._config_by_uid[uid] = config
-            await self._app_split_tunneling.restart(self._config_by_uid)
+
+            if self._is_app_based_config():
+                self._app_split_tunneling.start(self._config_by_uid)
+            else:
+                await self._app_split_tunneling.stop()
 
     async def clear_config(self, uid: int):
         """
@@ -59,7 +63,11 @@ class SplitTunnelingService:
             logger.info("Clearing config for user %s", uid)
             if uid in self._config_by_uid:
                 del self._config_by_uid[uid]
-                await self._app_split_tunneling.restart(self._config_by_uid)
+
+                if self._is_app_based_config():
+                    self._app_split_tunneling.start(self._config_by_uid)
+                else:
+                    await self._app_split_tunneling.stop()
 
     def get_config(self, uid: int) -> Optional[SplitTunnelingConfig]:
         """
@@ -76,3 +84,15 @@ class SplitTunnelingService:
             and the split tunneling configuration, in this order.
         """
         return list(self._config_by_uid.items())
+
+    def log_status(self):
+        """Log ST service status"""
+        logger.info("============Split Tunneling service status===========")
+        self._app_split_tunneling.log_status()
+        logger.info("=====================================================")
+
+    def _is_app_based_config(self) -> bool:
+        return any(
+            any(path for path in config.app_paths)  # any non empty path
+            for config in self._config_by_uid.values()    # on any user config
+        )

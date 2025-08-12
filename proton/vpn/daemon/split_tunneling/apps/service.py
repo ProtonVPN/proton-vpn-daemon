@@ -26,9 +26,6 @@ from proton.vpn.daemon.split_tunneling.apps.socket_monitor import SocketMonitor
 from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig
 
-from proton.vpn.daemon.split_tunneling.exceptions import WireGuardConnectionNotFound
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -50,18 +47,19 @@ class AppBasedSplitTunnelingService:
         else:
             logger.error("Unexpected event: %s", event)
 
+    def log_status(self):
+        """Logs the service status."""
+        logger.info("==============App-based ST service status============")
+        self._process_monitor.log_status()
+        self._socket_monitor.log_status()
+        logger.info("=====================================================")
+
     def start(self, config_by_uid: dict[int, SplitTunnelingConfig]) -> Awaitable[None]:
         """
         Starts the service in the background. This method is non-blocking.
         :param config_by_uid: split tunneling configuration indexed by unix user ID.
         :returns: an awaitable to be able to await until the service is stopped.
         """
-        done_future = asyncio.Future()
-        done_future.set_result(None)
-        if not self._is_app_based_config(config_by_uid):
-            # Nothing to do, there isn't app-based split tunneling config
-            return done_future
-
         self._socket_monitor.start()
         return self._process_monitor.start(
             config_by_uid=config_by_uid,
@@ -75,23 +73,11 @@ class AppBasedSplitTunnelingService:
         finally:
             self._socket_monitor.stop()
 
-    async def restart(self, config_by_uid: dict[int, SplitTunnelingConfig]):
-        """Equivalent to calling stop() and then start(config_by_uid)."""
-        await self.stop()
-        return self.start(config_by_uid=config_by_uid)
-
-    def _is_app_based_config(self, config_by_uid: dict[int, SplitTunnelingConfig]) -> bool:
-        return any(
-            any(path for path in config.app_paths)  # any non empty path
-            for config in config_by_uid.values()    # on any user config
-        )
-
 
 async def main():
     """Test script"""
 
     import os  # pylint: disable=C0415
-    import sys  # pylint: disable=C0415
     from proton.vpn.core.settings import SplitTunnelingMode  # pylint: disable=C0415
 
     from proton.vpn.daemon.split_tunneling.apps.process_monitor import \
@@ -107,10 +93,6 @@ async def main():
         await service.start(config_by_uid={
             uid: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=args.path)
         })
-
-    except WireGuardConnectionNotFound as error:
-        logger.error("Please start a VPN connection first: %s", error)
-        sys.exit(1)
     except asyncio.CancelledError:
         pass
     finally:

@@ -17,10 +17,12 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
+from __future__ import annotations
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
+from pprint import pformat
 from typing import Callable, Optional
 
 import asyncio
@@ -31,6 +33,8 @@ import psutil
 
 from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig
+
+from proton.vpn.daemon.split_tunneling.apps.utils import get_removed_config_app_paths_by_uid
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +66,9 @@ class Process:
     ppid: int
     exe: str
 
+    # configured ST paths this process matched against
+    matched_config_paths: set[str] = field(default_factory=set)
+
     @staticmethod
     def from_psutil(process: psutil.Process):
         """
@@ -81,43 +88,53 @@ class Process:
         )
 
 
-def _get_process(pid: int) -> Optional[Process]:
-    try:
-        return Process.from_psutil(psutil.Process(pid))
-    except psutil.NoSuchProcess:
-        return None
-
-
-def _process_match(
+def _find_exe_path_matches(
         process: Optional[Process], config_by_uid: dict[int, SplitTunnelingConfig]
-) -> bool:
+) -> set[str]:
     if not process:
-        return False
+        return set()
 
     if process.uid not in config_by_uid:
-        return False
+        return set()
 
+    matches = set()
     config = config_by_uid[process.uid]
-    if not any(
-        config_path and process.exe.startswith(config_path)
-        for config_path in config.app_paths
-    ):
-        return False
+    for app_path in config.app_paths:
+        if not app_path:
+            continue
+        if process.exe.startswith(app_path):
+            matches.add(app_path)
 
-    return True
+    return matches
 
 
 class ProcessMonitor:
-    """Monitors processes based on the specified Split Tunnelingconfiguration."""
+    """Monitors processes based on the specified Split Tunneling configuration."""
 
-    def __init__(self):
-        self._bpf: Optional[BPF] = None
+    def __init__(
+            self,
+            bpf: Optional[BPF] = None,
+            tracked_procs: Optional[dict[int, Process]] = None
+    ):
+        self._bpf = bpf
         self._background_task: Optional[asyncio.Task] = None
         self._stop_requested = False
-        self._tracked_procs: dict[int, psutil.Process] = {}
+        self._tracked_procs: dict[int, Process] = tracked_procs or {}
         self._argv = defaultdict(list)
         self._config_by_uid: Optional[dict[int, SplitTunnelingConfig]] = None
         self._process_match_callback: Callable[[ProcessEvent, Process], None] = None
+
+    @property
+    def config_by_uid(self) -> Optional[dict[int, SplitTunnelingConfig]]:
+        """Returns the curret config in use."""
+        return self._config_by_uid
+
+    def log_status(self):
+        """Logs the process monitor status."""
+        logger.info("===============Process monitor status================")
+        logger.info("Config: %s", self._config_by_uid)
+        logger.info("Tracked procs: %s", pformat(self._tracked_procs))
+        logger.info("=====================================================")
 
     def start(
             self, config_by_uid: dict[int, SplitTunnelingConfig],
@@ -131,23 +148,33 @@ class ProcessMonitor:
         Note that this method returns straight away, it doesn't wait that
         the background task is running.
         """
-        if self._background_task:
-            raise RuntimeError("Process monitoring background task already running")
-
-        logger.info("Starting process monitor")
-        self._config_by_uid = config_by_uid
-        # FIXME: think about what we do with symlinks  # pylint: disable=fixme
-        # self._resolve_symlinks(self._config_by_uid)
+        old_config_by_uid = self._config_by_uid
+        self._config_by_uid = config_by_uid.copy()
         self._process_match_callback = process_match_callback
-        self._track_existing_processes(config_by_uid, process_match_callback)
-        self._attach_bpf()
 
-        # start listening for process events via ebpf
-        self._background_task = asyncio.create_task(
-            self._run_process_monitoring()
-        )
-        # Ensure exceptions are bubbled up and caught by the exception handler
-        self._background_task.add_done_callback(lambda f: f.result())
+        if not self._background_task:
+            logger.info("Starting process monitor")
+
+            self._track_existing_processes(config_by_uid, process_match_callback)
+            self._attach_bpf()
+
+            # start listening for process events via ebpf
+            self._background_task = asyncio.create_task(
+                self._run_process_monitoring()
+            )
+            # Ensure exceptions are bubbled up and caught by the exception handler
+            self._background_task.add_done_callback(lambda f: f.result())
+        else:
+            removed_config_app_paths_by_uid = get_removed_config_app_paths_by_uid(
+                new_config_by_uid=self._config_by_uid,
+                old_config_by_uid=old_config_by_uid
+            )
+            if removed_config_app_paths_by_uid:
+                logger.info("Removed app paths by UID: %s", removed_config_app_paths_by_uid)
+                self._update_tracked_processes(removed_config_app_paths_by_uid)
+
+            logger.info("Process monitor already running: config updated")
+
         return self._background_task
 
     async def stop(self):
@@ -170,19 +197,12 @@ class ProcessMonitor:
         self.__init__()  # pylint: disable=C2801
         logger.info("Process monitor stopped")
 
-    async def restart(
-            self, config_by_uid: dict[int, SplitTunnelingConfig],
-            process_match_callback: Callable[[ProcessEvent, Process], None]
-    ):
-        """Stops and starts the process monitoring background task again."""
-        await self.stop()
-        self.start(config_by_uid, process_match_callback)
-
     def _attach_bpf(self):
-        with open(BPF_PROGRAM_PATH, "r", encoding="utf-8") as file:
-            bpf_text = file.read()
+        if not self._bpf:
+            with open(BPF_PROGRAM_PATH, "r", encoding="utf-8") as file:
+                bpf_text = file.read()
+            self._bpf = BPF(text=bpf_text)
 
-        self._bpf = BPF(text=bpf_text)
         execve_fnname = self._bpf.get_syscall_fnname("execve")
         self._bpf.attach_kprobe(event=execve_fnname, fn_name="syscall__execve")
         self._bpf.attach_kretprobe(event=execve_fnname, fn_name="do_ret_sys_execve")
@@ -206,12 +226,6 @@ class ProcessMonitor:
         while not self._stop_requested:
             self._bpf.perf_buffer_poll(timeout=30)  # timeout in ms
 
-    def _resolve_symlinks(self, config_by_uid):
-        for config in config_by_uid.values():
-            config.app_paths = [str(Path(path).resolve()) for path in config.app_paths]
-
-        logger.info("Settings after resolving symlinks %s", config_by_uid)
-
     def _track_existing_processes(self, config_by_uid, process_match_callback):
         start = time.time_ns()
 
@@ -220,16 +234,49 @@ class ProcessMonitor:
             if process.pid in self._tracked_procs:
                 continue
 
-            if _process_match(process, config_by_uid):
+            matches = _find_exe_path_matches(process, config_by_uid)
+            if matches:
+                process.matched_config_paths.update(matches)
                 self._tracked_procs[process.pid] = process
                 process_match_callback(ProcessEvent.EXEC, process)
 
                 for child in proc.children(recursive=True):
                     child = Process.from_psutil(child)
+                    child.matched_config_paths.update(matches)
                     self._tracked_procs[child.pid] = child
                     process_match_callback(ProcessEvent.CLONE, child)
 
         logger.info("Existing processes inspected in %d ms", (time.time_ns() - start) // 1_000_000)
+
+    def _update_tracked_processes(
+            self, removed_config_app_paths_by_uid: dict[int, set[str]]
+    ):
+        """
+        Stop tracking processes created by apps that were removed from
+        the ST config.
+        """
+        # check if any of the currently tracked processes matched one of the
+        # removed app paths
+        start = time.time_ns()
+        for process in list(self._tracked_procs.values()):
+            removed_config_app_paths = removed_config_app_paths_by_uid.get(process.uid)
+            if not removed_config_app_paths:
+                continue
+
+            for removed_app_path in removed_config_app_paths:
+                if removed_app_path in process.matched_config_paths:
+                    # if the process matched the removed app path then invalidate the match.
+                    process.matched_config_paths.remove(removed_app_path)
+
+            if not process.matched_config_paths:
+                # stop tracking processes that don't match any configured app paths and that
+                # are not a child of a parent process that matches configured app paths either
+                del self._tracked_procs[process.pid]
+                # when working on include mode we'll need to change this event so that the process
+                # is not ignored but added to the list of processes that don't match ST config
+                self._process_match_callback(ProcessEvent.EXIT, process)
+
+        logger.info("Process matches updated  in %d ms", (time.time_ns() - start) // 1_000_000)
 
     def _process_perf_buffer_event(self, _cpu, data, _size):
         event = self._bpf["events"].event(data)
@@ -265,12 +312,16 @@ class ProcessMonitor:
                 # process that's already being tracked running exec syscall
                 return
 
-            if _process_match(process, self._config_by_uid):
+            matches = _find_exe_path_matches(process, self._config_by_uid)
+            if matches:
+                process.matched_config_paths.update(matches)
                 self._tracked_procs[process.pid] = process
                 self._process_match_callback(ProcessEvent.EXEC, process)
         elif event is ProcessEvent.CLONE:
             if process.ppid in self._tracked_procs:
                 # if the parent pid is already tracked then the child is too
+                parent = self._tracked_procs[process.ppid]
+                process.matched_config_paths.update(parent.matched_config_paths)
                 self._tracked_procs[process.pid] = process
                 self._process_match_callback(ProcessEvent.CLONE, process)
         elif event is ProcessEvent.EXIT:
