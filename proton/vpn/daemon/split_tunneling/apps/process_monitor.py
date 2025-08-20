@@ -34,8 +34,6 @@ import psutil
 from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig
 
-from proton.vpn.daemon.split_tunneling.apps.utils import get_removed_config_app_paths_by_uid
-
 logger = logging.getLogger(__name__)
 
 BPF_PROGRAM_PATH = Path(__file__.replace(".py", ".bpf.c"))
@@ -148,8 +146,7 @@ class ProcessMonitor:
         Note that this method returns straight away, it doesn't wait that
         the background task is running.
         """
-        old_config_by_uid = self._config_by_uid
-        self._config_by_uid = config_by_uid.copy()
+        self._config_by_uid = config_by_uid
         self._process_match_callback = process_match_callback
 
         if not self._background_task:
@@ -165,14 +162,6 @@ class ProcessMonitor:
             # Ensure exceptions are bubbled up and caught by the exception handler
             self._background_task.add_done_callback(lambda f: f.result())
         else:
-            removed_config_app_paths_by_uid = get_removed_config_app_paths_by_uid(
-                new_config_by_uid=self._config_by_uid,
-                old_config_by_uid=old_config_by_uid
-            )
-            if removed_config_app_paths_by_uid:
-                logger.info("Removed app paths by UID: %s", removed_config_app_paths_by_uid)
-                self._update_tracked_processes(removed_config_app_paths_by_uid)
-
             logger.info("Process monitor already running: config updated")
 
         return self._background_task
@@ -247,36 +236,6 @@ class ProcessMonitor:
                     process_match_callback(ProcessEvent.CLONE, child)
 
         logger.info("Existing processes inspected in %d ms", (time.time_ns() - start) // 1_000_000)
-
-    def _update_tracked_processes(
-            self, removed_config_app_paths_by_uid: dict[int, set[str]]
-    ):
-        """
-        Stop tracking processes created by apps that were removed from
-        the ST config.
-        """
-        # check if any of the currently tracked processes matched one of the
-        # removed app paths
-        start = time.time_ns()
-        for process in list(self._tracked_procs.values()):
-            removed_config_app_paths = removed_config_app_paths_by_uid.get(process.uid)
-            if not removed_config_app_paths:
-                continue
-
-            for removed_app_path in removed_config_app_paths:
-                if removed_app_path in process.matched_config_paths:
-                    # if the process matched the removed app path then invalidate the match.
-                    process.matched_config_paths.remove(removed_app_path)
-
-            if not process.matched_config_paths:
-                # stop tracking processes that don't match any configured app paths and that
-                # are not a child of a parent process that matches configured app paths either
-                del self._tracked_procs[process.pid]
-                # when working on include mode we'll need to change this event so that the process
-                # is not ignored but added to the list of processes that don't match ST config
-                self._process_match_callback(ProcessEvent.EXIT, process)
-
-        logger.info("Process matches updated  in %d ms", (time.time_ns() - start) // 1_000_000)
 
     def _process_perf_buffer_event(self, _cpu, data, _size):
         event = self._bpf["events"].event(data)
