@@ -19,108 +19,55 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from __future__ import annotations
 from collections import defaultdict
-from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from pathlib import Path
 from pprint import pformat
 from typing import Callable, Optional
 
 import asyncio
-import time
 
 from bcc import BPF
-import psutil
 
 from proton.vpn import logging
-from proton.vpn.core.settings import SplitTunnelingConfig
+from proton.vpn.core.settings import SplitTunnelingConfig, SplitTunnelingMode
+
+from proton.vpn.daemon.split_tunneling.apps.process_matcher import \
+    Process, ProcessMatcher
 
 logger = logging.getLogger(__name__)
 
 BPF_PROGRAM_PATH = Path(__file__.replace(".py", ".bpf.c"))
 
 
-class ProcessEvent(Enum):
-    "Type of process events."
-    EXEC = auto()
-    CLONE = auto()
-    EXIT = auto()
-
-
 class PerfBufferEventType(Enum):
     """Type of events sent to the BPF perf buffer"""
-    EXEC_ARGUMENT = 0
-    EXEC_RETURN = 1
+    EXEC_ARGV_FRAGMENT = 0
+    EXEC = 1
     CLONE = 2
     EXIT = 3
 
 
-@dataclass
-class Process:
-    """
-    Hold all required process information to do Split Tunneling.
-    """
-    uid: int
-    pid: int
-    ppid: int
-    exe: str
-
-    # configured ST paths this process matched against
-    matched_config_paths: set[str] = field(default_factory=set)
-
-    @staticmethod
-    def from_psutil(process: psutil.Process):
-        """
-        Builds a Process instance from a psutil.Process instance.
-        """
-        uid = process.uids().real
-        ppid = process.ppid()
-        exe = ""
-        try:
-            exe = process.exe()
-        except (psutil.AccessDenied, psutil.ZombieProcess) as error:
-            # Even when running as root, some processes raise this
-            logger.warning("Error getting process path: %s: %s", type(error).__name__, error)
-
-        return Process(
-            pid=process.pid, uid=uid, ppid=ppid, exe=exe
-        )
-
-
-def _find_exe_path_matches(
-        process: Optional[Process], config_by_uid: dict[int, SplitTunnelingConfig]
-) -> set[str]:
-    if not process:
-        return set()
-
-    if process.uid not in config_by_uid:
-        return set()
-
-    matches = set()
-    config = config_by_uid[process.uid]
-    for app_path in config.app_paths:
-        if not app_path:
-            continue
-        if process.exe.startswith(app_path):
-            matches.add(app_path)
-
-    return matches
-
-
+# pylint: disable=too-many-instance-attributes,
 class ProcessMonitor:
     """Monitors processes based on the specified Split Tunneling configuration."""
 
+    # pylint: disable=too-many-arguments
     def __init__(
             self,
+            process_event_callback: Callable[[Process, SplitTunnelingMode]],
+            config_by_uid: Optional[dict[int, SplitTunnelingConfig]] = None,
+            tracked_procs: Optional[dict[int, Process]] = None,
             bpf: Optional[BPF] = None,
-            tracked_procs: Optional[dict[int, Process]] = None
+            process_matcher: Optional[ProcessMatcher] = None,
     ):
+        self._process_event_callback = process_event_callback
+        self._config_by_uid = config_by_uid
         self._bpf = bpf
+        self._process_matcher = process_matcher or ProcessMatcher()
         self._background_task: Optional[asyncio.Task] = None
         self._stop_requested = False
-        self._tracked_procs: dict[int, Process] = tracked_procs or {}
+        self._tracked_procs = tracked_procs or {}
         self._argv = defaultdict(list)
-        self._config_by_uid: Optional[dict[int, SplitTunnelingConfig]] = None
-        self._process_match_callback: Callable[[ProcessEvent, Process], None] = None
 
     @property
     def config_by_uid(self) -> Optional[dict[int, SplitTunnelingConfig]]:
@@ -135,24 +82,25 @@ class ProcessMonitor:
         logger.info("=====================================================")
 
     def start(
-            self, config_by_uid: dict[int, SplitTunnelingConfig],
-            process_match_callback: Callable[[ProcessEvent, Process], None]
+            self, config_by_uid: dict[int, SplitTunnelingConfig]
     ) -> asyncio.Task:
         """
         Starts a background task to monitor processes.
         @param config_by_uid: map of split tunneling configuration by uid (unix user id)
-        @param process_match_callback: callback called whenever there is a process match.
+        @param process_event_callback: callback called whenever there is a process event.
 
         Note that this method returns straight away, it doesn't wait that
         the background task is running.
         """
         self._config_by_uid = config_by_uid
-        self._process_match_callback = process_match_callback
 
         if not self._background_task:
             logger.info("Starting process monitor")
 
-            self._track_existing_processes(config_by_uid, process_match_callback)
+            self._tracked_procs = self._process_matcher.check_all_processes(config_by_uid)
+            for process in self._tracked_procs.values():
+                self._process_event_callback(process, config_by_uid[process.uid].mode)
+
             self._attach_bpf()
 
             # start listening for process events via ebpf
@@ -183,7 +131,8 @@ class ProcessMonitor:
         except Exception:  # pylint: disable=broad-except
             logger.exception("Unexpected error while monitoring processes")
         # reset object state
-        self.__init__()  # pylint: disable=C2801
+        callback = self._process_event_callback
+        self.__init__(process_event_callback=callback)  # pylint: disable=C2801
         logger.info("Process monitor stopped")
 
     def _attach_bpf(self):
@@ -215,78 +164,64 @@ class ProcessMonitor:
         while not self._stop_requested:
             self._bpf.perf_buffer_poll(timeout=30)  # timeout in ms
 
-    def _track_existing_processes(self, config_by_uid, process_match_callback):
-        start = time.time_ns()
-
-        for proc in psutil.process_iter():
-            process = Process.from_psutil(proc)
-            if process.pid in self._tracked_procs:
-                continue
-
-            matches = _find_exe_path_matches(process, config_by_uid)
-            if matches:
-                process.matched_config_paths.update(matches)
-                self._tracked_procs[process.pid] = process
-                process_match_callback(ProcessEvent.EXEC, process)
-
-                for child in proc.children(recursive=True):
-                    child = Process.from_psutil(child)
-                    child.matched_config_paths.update(matches)
-                    self._tracked_procs[child.pid] = child
-                    process_match_callback(ProcessEvent.CLONE, child)
-
-        logger.info("Existing processes inspected in %d ms", (time.time_ns() - start) // 1_000_000)
-
     def _process_perf_buffer_event(self, _cpu, data, _size):
         event = self._bpf["events"].event(data)
 
-        if event.type == PerfBufferEventType.EXEC_ARGUMENT.value:
+        if event.type == PerfBufferEventType.EXEC_ARGV_FRAGMENT.value:
+            # Whenever an exec syscall is initiated, multiple EXEC_ARGV_FRAGMENT events are
+            # sent, one per argv: the first one contains the full path, and the following
+            # ones contain each argument (up to a limit, see ebpf program).
             self._argv[event.pid].append(event.argv)
-        elif event.type == PerfBufferEventType.EXEC_RETURN.value:
-            command = b' '.join(self._argv[event.pid]).replace(b'\n', b'\\n').decode('utf-8')
+            return
+
+        exe = ""
+        if event.type == PerfBufferEventType.EXEC.value:
+            # Once the exec syscall returns, the final exe path is built out of all the
+            # previous EXEC_ARGV_FRAGMENT events containing the fragments that make it up.
+            exe = b' '.join(self._argv[event.pid]).replace(b'\n', b'\\n').decode('utf-8')
             try:
                 del self._argv[event.pid]
             except KeyError:
                 pass
-            self._process_proc_event(
-                ProcessEvent.EXEC,
-                Process(event.uid, event.pid, event.ppid, command)
-            )
-        elif event.type == PerfBufferEventType.CLONE.value:
-            command = event.comm.decode('utf-8')
-            self._process_proc_event(
-                ProcessEvent.CLONE,
-                Process(event.uid, event.pid, event.ppid, command)
-            )
-        elif event.type == PerfBufferEventType.EXIT.value:
-            command = event.comm.decode('utf-8')
-            self._process_proc_event(
-                ProcessEvent.EXIT,
-                Process(event.uid, event.pid, event.ppid, command)
-            )
 
-    def _process_proc_event(self, event: ProcessEvent, process: Process):
-        if event is ProcessEvent.EXEC:
-            if process.pid in self._tracked_procs:
-                # process that's already being tracked running exec syscall
-                return
+        self.check_for_config_matches(
+            PerfBufferEventType(value=event.type),
+            Process(event.uid, event.pid, event.ppid, exe)
+        )
 
-            matches = _find_exe_path_matches(process, self._config_by_uid)
-            if matches:
-                process.matched_config_paths.update(matches)
-                self._tracked_procs[process.pid] = process
-                self._process_match_callback(ProcessEvent.EXEC, process)
-        elif event is ProcessEvent.CLONE:
-            if process.ppid in self._tracked_procs:
-                # if the parent pid is already tracked then the child is too
-                parent = self._tracked_procs[process.ppid]
+    def check_for_config_matches(self, event: PerfBufferEventType, process: Process):
+        """Checks if the process matches the ST config and calls the callback."""
+        if process.uid not in self.config_by_uid:
+            # processes started by users that didn't set any ST config are ignored
+            return
+
+        if event is PerfBufferEventType.EXEC:
+            # a new process was started: check for config path matches
+            matches = self._process_matcher.check_process(process, self._config_by_uid)
+            process.matched_config_paths.update(matches)
+            self._tracked_procs[process.pid] = process
+
+            self._process_event_callback(process, self.config_by_uid[process.uid].mode)
+
+        elif event is PerfBufferEventType.CLONE:
+            # a process was cloned/forked: check if its parent matched config paths
+            parent = self._tracked_procs.get(process.ppid)
+            match = parent and parent.matched_config_paths
+            if match:
+                # if the parent matched any config paths then the child matches them too
                 process.matched_config_paths.update(parent.matched_config_paths)
                 self._tracked_procs[process.pid] = process
-                self._process_match_callback(ProcessEvent.CLONE, process)
-        elif event is ProcessEvent.EXIT:
+
+            self._process_event_callback(process, self.config_by_uid[process.uid].mode)
+
+        elif event is PerfBufferEventType.EXIT:
+            # a process exited: stop tracking it
             if process.pid in self._tracked_procs:
                 process = self._tracked_procs[process.pid]
-                self._process_match_callback(ProcessEvent.EXIT, process)
+                process.running = False
+
+                self._process_event_callback(process, self.config_by_uid[process.uid].mode)
+
                 del self._tracked_procs[process.pid]
 
 
@@ -316,16 +251,16 @@ async def main():
     )
     args = parser.parse_args()
 
-    process_monitor = ProcessMonitor()
+    process_monitor = ProcessMonitor(
+        process_event_callback=lambda event, process: logger.info(
+                "event: %s, process: %s", event, process
+            ))
     uid = args.uid or os.getuid()
     try:
         await process_monitor.start(
             config_by_uid={
                 uid: SplitTunnelingConfig(app_paths=args.path)
-            },
-            process_match_callback=lambda event, process: logger.info(
-                "event: %s, process: %s", event, process
-            )
+            }
         )
     except asyncio.CancelledError:
         pass

@@ -17,14 +17,16 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 import asyncio
+import os
+
 from typing import Awaitable
 
 from proton.vpn.daemon.split_tunneling.apps.process_monitor import \
-    Process, ProcessEvent, ProcessMonitor
+    Process, ProcessMonitor, build_process_monitor_cli_parser
 from proton.vpn.daemon.split_tunneling.apps.socket_monitor import SocketMonitor
 
 from proton.vpn import logging
-from proton.vpn.core.settings import SplitTunnelingConfig
+from proton.vpn.core.settings import SplitTunnelingConfig, SplitTunnelingMode
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +35,18 @@ class AppBasedSplitTunnelingService:
     """Service to split-tunnel applications."""
 
     def __init__(self):
-        self._process_monitor = ProcessMonitor()
+        self._process_monitor = ProcessMonitor(self._on_process_event)
         self._socket_monitor = SocketMonitor()
 
-    def _on_process_event(self, event: ProcessEvent, process: Process):
-        logger.info("Process match: event=%s, process=%s", event, process)
-        if event in (ProcessEvent.EXEC, ProcessEvent.CLONE):
-            logger.info("Removing pid %d from VPN", process.pid)
+    def _on_process_event(self, process: Process, mode: SplitTunnelingMode):
+        logger.info("Process event: %s", process)
+        if process.running and (
+            (mode == SplitTunnelingMode.EXCLUDE and process.matched_config_paths) or
+            (mode == SplitTunnelingMode.INCLUDE and not process.matched_config_paths)
+        ):
             self._socket_monitor.exclude_process_from_vpn(process.pid)
-        elif event == ProcessEvent.EXIT:
-            logger.info("Forgetting pid %d", process.pid)
-            self._socket_monitor.stop_tracking_process(process.pid)
         else:
-            logger.error("Unexpected event: %s", event)
+            self._socket_monitor.stop_tracking_process(process.pid)
 
     def log_status(self):
         """Logs the service status."""
@@ -61,10 +62,7 @@ class AppBasedSplitTunnelingService:
         :returns: an awaitable to be able to await until the service is stopped.
         """
         self._socket_monitor.start()
-        return self._process_monitor.start(
-            config_by_uid=config_by_uid,
-            process_match_callback=self._on_process_event
-        )
+        return self._process_monitor.start(config_by_uid=config_by_uid)
 
     async def stop(self):
         """Stops the service."""
@@ -77,11 +75,6 @@ class AppBasedSplitTunnelingService:
 async def main():
     """Test script"""
 
-    import os  # pylint: disable=C0415
-    from proton.vpn.core.settings import SplitTunnelingMode  # pylint: disable=C0415
-
-    from proton.vpn.daemon.split_tunneling.apps.process_monitor import \
-        build_process_monitor_cli_parser  # pylint: disable=C0415
     parser = build_process_monitor_cli_parser(
         name="App-based Split Tunneling"
     )

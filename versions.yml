@@ -1,3 +1,12 @@
+version: 0.13.0
+time: 2025/08/21 10:20
+author: Pep Llaneras
+email: josep.llaneras@proton.ch
+urgency: low
+stability: unstable
+description:
+- "feat: add include mode for app-based split tunneling"
+---
 version: 0.12.1
 time: 2025/08/13 14:10
 author: Pep Llaneras

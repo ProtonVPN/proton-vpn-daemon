@@ -120,6 +120,8 @@ int tracepoint_fork(struct sched_process_fork *ctx) {
 
 int tracepoint_exit(struct tracepoint__sched__sched_process_exit *ctx) {
     struct data_t data = {};
+    u32 uid = bpf_get_current_uid_gid() & 0xffffffff;
+    data.uid = uid;
     data.pid = ctx->pid;
     data.type = EVENT_EXIT;
     events.perf_submit(ctx, &data, sizeof(data));

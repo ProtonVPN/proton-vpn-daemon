@@ -158,10 +158,10 @@ class SocketMonitor:
         if not self._started:
             raise RuntimeError("Socket monitor was not started yet")
 
-        pid = ctypes.c_uint32(pid)
-        if pid in self._bpf_pid_map:
+        pid_c_uint32 = ctypes.c_uint32(pid)
+        if pid_c_uint32 in self._bpf_pid_map:
             logger.info("Removing %s from pid map", pid)
-            del self._bpf_pid_map[pid]
+            del self._bpf_pid_map[pid_c_uint32]
 
     def stop(self):
         """Stops monitoring sockets."""
