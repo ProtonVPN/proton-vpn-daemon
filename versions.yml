@@ -1,3 +1,13 @@
+version: 0.13.1
+time: 2025/09/01 19:14
+author: Luke Titley
+email: luke.titley@proton.ch
+urgency: low
+stability: unstable
+description:
+- "fix: Validate existing service with dbus"
+---
+
 version: 0.13.0
 time: 2025/08/21 10:20
 author: Pep Llaneras

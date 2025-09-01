@@ -20,10 +20,10 @@ from __future__ import annotations
 from typing import Optional, Union
 import asyncio
 import sys
-import subprocess  # nosec B404 # nosemgrep: gitlab.bandit.B404
+from concurrent.futures import ThreadPoolExecutor
 
 from dbus_fast.aio import MessageBus
-from dbus_fast import BusType
+from dbus_fast import BusType, Message, MessageType
 import dbus_fast
 from bcc import __version__ as bcc_version
 from packaging import version
@@ -34,6 +34,51 @@ from proton.vpn.split_tunneling import exceptions
 from proton.vpn.split_tunneling import SplitTunneling
 
 is_python_3_11_or_higher = sys.version_info >= (3, 11)
+
+PROTON_VPN_SPLIT_TUNNELING = "me.proton.vpn.split_tunneling"
+
+
+async def _async_proton_dbus_service_exists():
+    """
+    Asynchronously detects whether there is a proton dbus service available.
+    Returns true if there is a proton dbus service available.
+    """
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+
+    reply = await bus.call(
+        Message(
+            destination="org.freedesktop.DBus",
+            path="/org/freedesktop/DBus",
+            interface="org.freedesktop.DBus",
+            member="ListNames",
+        )
+    )
+
+    if reply.message_type == MessageType.ERROR:
+        raise RuntimeError(reply.body[0])
+
+    names = reply.body[0]
+
+    return PROTON_VPN_SPLIT_TUNNELING in names
+
+
+def _proton_dbus_service_exists():
+    """
+    Synchronously detects whether there is a proton dbus service available.
+    Returns true if there is a proton dbus service available.
+
+    This runs in a separate thread which allows this function to be called
+    from synchronous code running in an async context.
+    """
+
+    executor = ThreadPoolExecutor(max_workers=1)
+
+    def _worker():
+        # This runs in the new thread, where no loop is active.
+        return asyncio.run(_async_proton_dbus_service_exists())
+
+    future = executor.submit(_worker)
+    return future.result()
 
 
 async def _backwards_compatible_asyncio_timeout(timeout: int, func, *args):
@@ -214,17 +259,8 @@ class SplitTunnelingDbusClient(SplitTunneling):
         Determines whether the split tunneling connection
         implementation is valid or not.
         """
-        try:
-            subprocess.check_output(  # nosec B603
-                [
-                    "/usr/bin/systemctl",
-                    "is-active",
-                    "--quiet",
-                    "me.proton.vpn.split_tunneling"
-                ],
-                stderr=subprocess.STDOUT
-            )
-        except subprocess.CalledProcessError:
+        service_exists = _proton_dbus_service_exists()
+        if not service_exists:
             return False
 
         # Check if the BCC version is at least 0.26.0
