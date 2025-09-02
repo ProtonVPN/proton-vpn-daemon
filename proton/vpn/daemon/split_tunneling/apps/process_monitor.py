@@ -21,7 +21,6 @@ from __future__ import annotations
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
-from pprint import pformat
 from typing import Callable, Optional
 
 import asyncio
@@ -31,6 +30,7 @@ from bcc import BPF
 from proton.vpn import logging
 from proton.vpn.core.settings import SplitTunnelingConfig, SplitTunnelingMode
 
+from proton.vpn.daemon.split_tunneling.apps.process_map import ProcessMap
 from proton.vpn.daemon.split_tunneling.apps.process_matcher import \
     Process, ProcessMatcher
 
@@ -78,7 +78,9 @@ class ProcessMonitor:
         """Logs the process monitor status."""
         logger.info("===============Process monitor status================")
         logger.info("Config: %s", self._config_by_uid)
-        logger.info("Tracked procs: %s", pformat(self._tracked_procs))
+        process_map = ProcessMap(self._tracked_procs)
+        logger.info("Tracked processes dumped at: %s", process_map.dump())
+        logger.info("Tracked process trees dumped at: %s", process_map.dump_process_trees())
         logger.info("=====================================================")
 
     def start(

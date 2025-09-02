@@ -1,0 +1,34 @@
+[
+    {
+        "uid": 1000,
+        "pid": 1,
+        "ppid": 0,
+        "exe": "/root",
+        "matched_config_paths": [],
+        "running": true
+    },
+        {
+            "uid": 1000,
+            "pid": 2,
+            "ppid": 1,
+            "exe": "/root/child1",
+            "matched_config_paths": [],
+            "running": true
+        },
+        {
+            "uid": 1000,
+            "pid": 3,
+            "ppid": 1,
+            "exe": "/root/child2",
+            "matched_config_paths": [],
+            "running": true
+        },
+            {
+                "uid": 1000,
+                "pid": 4,
+                "ppid": 3,
+                "exe": "/root/child2/child1",
+                "matched_config_paths": [],
+                "running": true
+            }
+]
