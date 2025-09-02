@@ -16,6 +16,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
+from importlib.metadata import version
 import asyncio
 
 from proton.vpn import logging
@@ -37,7 +38,7 @@ def run_forever():
     logging.config(filename="vpn-daemon")
     logger = logging.getLogger(__name__)
 
-    logger.info("Starting Proton VPN daemon")
+    logger.info("Starting Proton VPN daemon v%s", version("proton-vpn-daemon"))
     loop = asyncio.new_event_loop()
 
     # Configure the exception handler for asyncio.

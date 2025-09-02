@@ -58,7 +58,7 @@ class ProcessMonitor:
             config_by_uid: Optional[dict[int, SplitTunnelingConfig]] = None,
             tracked_procs: Optional[dict[int, Process]] = None,
             bpf: Optional[BPF] = None,
-            process_matcher: Optional[ProcessMatcher] = None,
+            process_matcher: Optional[ProcessMatcher] = None
     ):
         self._process_event_callback = process_event_callback
         self._config_by_uid = config_by_uid
@@ -107,8 +107,15 @@ class ProcessMonitor:
             self._background_task = asyncio.create_task(
                 self._run_process_monitoring()
             )
+
             # Ensure exceptions are bubbled up and caught by the exception handler
-            self._background_task.add_done_callback(lambda f: f.result())
+            def on_done(future):
+                try:
+                    future.result()
+                except asyncio.CancelledError:
+                    pass
+
+            self._background_task.add_done_callback(on_done)
         else:
             logger.info("Process monitor already running: config updated")
 
@@ -196,32 +203,35 @@ class ProcessMonitor:
             return
 
         if event is PerfBufferEventType.EXEC:
+            already_tracked_process = self._tracked_procs.get(process.pid)
+            if already_tracked_process and already_tracked_process.matched_config_paths:
+                # We do a sticky process matching: once a process matches one of the
+                # config paths then any subsequent exec syscalls done by the same process
+                # are ignored. This is because some apps start from an executable
+                # but then run an exec syscall to a different one (e.g. Google Chrome).
+                return
+
             # a new process was started: check for config path matches
             matches = self._process_matcher.check_process(process, self._config_by_uid)
             process.matched_config_paths.update(matches)
             self._tracked_procs[process.pid] = process
-
             self._process_event_callback(process, self.config_by_uid[process.uid].mode)
 
         elif event is PerfBufferEventType.CLONE:
             # a process was cloned/forked: check if its parent matched config paths
             parent = self._tracked_procs.get(process.ppid)
-            match = parent and parent.matched_config_paths
-            if match:
-                # if the parent matched any config paths then the child matches them too
+            if parent:
+                # a cloned process inherits its parent config path matches
                 process.matched_config_paths.update(parent.matched_config_paths)
                 self._tracked_procs[process.pid] = process
-
-            self._process_event_callback(process, self.config_by_uid[process.uid].mode)
+                self._process_event_callback(process, self.config_by_uid[process.uid].mode)
 
         elif event is PerfBufferEventType.EXIT:
             # a process exited: stop tracking it
             if process.pid in self._tracked_procs:
                 process = self._tracked_procs[process.pid]
                 process.running = False
-
                 self._process_event_callback(process, self.config_by_uid[process.uid].mode)
-
                 del self._tracked_procs[process.pid]
 
 
@@ -233,33 +243,46 @@ def build_process_monitor_cli_parser(name: str):
         prog=name,
         description="For testing purposes only"
     )
+    parser.add_argument("-u", "--uid", required=True, type=int, help="UID to exclude process for.")
+    parser.add_argument(
+        "-m", "--mode", required=True, choices=["exclude", "include"],
+        help="Split Tunneling mode"
+    )
     parser.add_argument(
         "-p", "--path", required=True, action="append",
         help="Process paths to exclude."
     )
-    parser.add_argument("--uid", required=False, type=int, help="UID to exclude process for.")
 
     return parser
 
 
 async def main():
     """Test script"""
-    import os  # pylint: disable=C0415
+    logging.config(filename="stprocmon")
+    _logger = logging.getLogger("stprocmon")
 
     parser = build_process_monitor_cli_parser(
         name="Process monitor for app-based Split Tunneling"
     )
     args = parser.parse_args()
 
-    process_monitor = ProcessMonitor(
-        process_event_callback=lambda event, process: logger.info(
-                "event: %s, process: %s", event, process
-            ))
-    uid = args.uid or os.getuid()
+    def callback(process: Process, mode: SplitTunnelingMode):  # pylint: disable=unused-argument
+        if process.matched_config_paths:
+            for config_path in args.path:
+                if any(
+                    process_path.startswith(config_path)
+                    for process_path in process.matched_config_paths
+                ):
+                    _logger.info("Process match: %s", process)
+
+    process_monitor = ProcessMonitor(process_event_callback=callback)
     try:
         await process_monitor.start(
             config_by_uid={
-                uid: SplitTunnelingConfig(app_paths=args.path)
+                args.uid: SplitTunnelingConfig(
+                    mode=SplitTunnelingMode(value=args.mode),
+                    app_paths=args.path
+                )
             }
         )
     except asyncio.CancelledError:

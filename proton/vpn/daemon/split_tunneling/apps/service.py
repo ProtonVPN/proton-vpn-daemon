@@ -17,7 +17,6 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 import asyncio
-import os
 
 from typing import Awaitable
 
@@ -39,7 +38,9 @@ class AppBasedSplitTunnelingService:
         self._socket_monitor = SocketMonitor()
 
     def _on_process_event(self, process: Process, mode: SplitTunnelingMode):
-        logger.info("Process event: %s", process)
+        if process.matched_config_paths:
+            logger.info("Process match: %s", process)
+
         if process.running and (
             (mode == SplitTunnelingMode.EXCLUDE and process.matched_config_paths) or
             (mode == SplitTunnelingMode.INCLUDE and not process.matched_config_paths)
@@ -80,11 +81,15 @@ async def main():
     )
     args = parser.parse_args()
 
-    uid = args.uid or os.getuid()
+    logging.config(filename="app-based-st-service")
+
     service = AppBasedSplitTunnelingService()
     try:
         await service.start(config_by_uid={
-            uid: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=args.path)
+            args.uid: SplitTunnelingConfig(
+                mode=SplitTunnelingMode(value=args.mode),
+                app_paths=args.path
+            )
         })
     except asyncio.CancelledError:
         pass

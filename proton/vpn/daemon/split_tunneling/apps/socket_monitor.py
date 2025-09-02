@@ -146,7 +146,7 @@ class SocketMonitor:
         if not self._started:
             raise RuntimeError("Socket monitor was not started yet")
 
-        logger.info("Adding %s to pid map", pid)
+        logger.debug("Adding %s to pid map", pid)
         self._bpf_pid_map[ctypes.c_uint32(pid)] = ctypes.c_uint32(1)
 
     def stop_tracking_process(self, pid: int):  # pylint: disable=redefined-outer-name
@@ -160,7 +160,7 @@ class SocketMonitor:
 
         pid_c_uint32 = ctypes.c_uint32(pid)
         if pid_c_uint32 in self._bpf_pid_map:
-            logger.info("Removing %s from pid map", pid)
+            logger.debug("Removing %s from pid map", pid)
             del self._bpf_pid_map[pid_c_uint32]
 
     def stop(self):

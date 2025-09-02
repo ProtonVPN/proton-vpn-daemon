@@ -18,7 +18,6 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 import time
 
 import psutil
@@ -80,7 +79,6 @@ class ProcessMatcher:
         :param config_by_uid: ST config indexed by user ID (unix UID).
         :returns: the app path matches.
         """
-
         if process.uid not in config_by_uid:
             return set()
 
@@ -100,23 +98,18 @@ class ProcessMatcher:
         return matches
 
     @classmethod
-    def check_all_processes(
-            cls, config_by_uid, processes: Optional[list[Process]] = None
-    ) -> dict[int, Process]:
+    def check_all_processes(cls, config_by_uid) -> dict[int, Process]:
         """
-        Returns a dict with all processes indexed by ID. Each process contains the
-        configured ST app paths it matched against.
+        Returns a dict with all currently running processes indexed by ID. Each process
+        contains the configured ST app paths it matched against.
 
-        If the processes parameter is None, the currently running processes are listed.
         Note: processes started by users for which there is not ST config are ignored.
         """
         start = time.time_ns()
         tracked_procs = {}
 
-        processes = processes or [Process.from_psutil(proc) for proc in psutil.process_iter()]
-
-        for process in processes:
-            process = tracked_procs.get(process.pid) or process
+        for psutil_process in psutil.process_iter():
+            process = tracked_procs.get(psutil_process.pid) or Process.from_psutil(psutil_process)
             if process.uid not in config_by_uid:
                 # only processes created by users that added ST config are checked
                 continue
@@ -132,7 +125,7 @@ class ProcessMatcher:
             if process.matched_config_paths:
                 # if the process matched any config paths, then we also flag all its
                 # descendant processes with the same config path matches
-                for descendant in process.children(recursive=True):
+                for descendant in psutil_process.children(recursive=True):
                     descendant = tracked_procs.get(descendant.pid) \
                         or Process.from_psutil(descendant)
                     descendant.matched_config_paths.update(matched_config_paths)
