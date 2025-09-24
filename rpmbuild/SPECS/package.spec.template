@@ -1,4 +1,5 @@
 %define unmangled_name proton-vpn-daemon
+%define pep_625_name proton_vpn_daemon
 %define version {version}
 %define src_dbus_service dbus.service
 %define dst_dbus_service me.proton.vpn.split_tunneling.service
@@ -18,12 +19,12 @@ Group: ProtonVPN
 License: GPLv3
 Vendor: Proton AG <opensource@proton.me>
 URL: https://github.com/ProtonVPN/%{{unmangled_name}}
-Source0: %{{unmangled_name}}-%{{version}}.tar.gz
+Source0: %{{pep_625_name}}-%{{version}}.tar.gz
 Source1: %{{src_introspection_xml}}
 Source2: %{{src_dbus_service}}
 Source3: %{{src_systemd_service}}
 BuildArch: noarch
-BuildRoot: %{{_tmppath}}/%{{unmangled_name}}-%{{version}}-%{{release}}-buildroot
+BuildRoot: %{{_tmppath}}/%{{pep_625_name}}-%{{version}}-%{{release}}-buildroot
 
 BuildRequires: python3-devel
 BuildRequires: python3-setuptools
@@ -60,23 +61,24 @@ systemctl enable %{{dst_systemd_service}}
 systemctl start %{{dst_systemd_service}}
 
 %prep
-%setup -n %{{unmangled_name}}-%{{version}} -n %{{unmangled_name}}-%{{version}}
+%setup -q -n %{{pep_625_name}}-%{{version}}
 
 %build
-%{{python3}} setup.py build
+%pyproject_wheel
 
 %install
-
 install -D -m 644 %{{SOURCE1}} %{{buildroot}}%{{_sysconfdir}}/dbus-1/system.d/%{{dst_introspection_xml}}
 install -D -m 644 %{{SOURCE2}} %{{buildroot}}%{{_sysconfdir}}/dbus-1/system-services/%{{dst_dbus_service}}
 install -D -m 644 %{{SOURCE3}} %{{buildroot}}%{{_unitdir}}/%{{dst_systemd_service}}
-%{{python3}} setup.py install --single-version-externally-managed -O1 --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES
+%pyproject_install
+%pyproject_save_files proton
 
-%files -f INSTALLED_FILES
-%{{python3_sitelib}}/proton_vpn_daemon-%{{version}}*.egg-info/
+%files -n %{{name}} -f %{{pyproject_files}}
 %{{_sysconfdir}}/dbus-1/system.d/%{{dst_introspection_xml}}
 %{{_sysconfdir}}/dbus-1/system-services/%{{dst_dbus_service}}
 %{{_unitdir}}/%{{dst_systemd_service}}
-%defattr(-,root,root)
+
+%check
+%pyproject_check_import
 
 %changelog
