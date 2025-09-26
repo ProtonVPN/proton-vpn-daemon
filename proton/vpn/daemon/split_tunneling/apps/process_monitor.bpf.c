@@ -95,36 +95,32 @@ int do_ret_sys_execve(struct pt_regs *ctx)
     return 0;
 }
 
-struct sched_process_fork {
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    char parent_comm[16];
-    u32 parent_pid;
-    char child_comm[16];
-    u32 child_pid;
-};
-
-int tracepoint_fork(struct sched_process_fork *ctx) {
+// Using the TRACEPOINT_PROBE macro to define the tracepoint.
+// The arguments for this hook are defined in the macro.
+// sched and sched_process_fork/sched_process_exit are the arguments to the
+// macro itself and not part of the function signature.
+//
+// 'args' is the parameter given by the TRACEPOINT_PROBE macro and
+// contains the fields defined in the tracepoint definition.
+TRACEPOINT_PROBE(sched, sched_process_fork) {
     struct data_t data = {};
     u32 uid = bpf_get_current_uid_gid() & 0xffffffff;
     data.uid = uid;
-    data.pid = ctx->child_pid;
-    data.ppid = ctx->parent_pid;
+    data.pid = args->child_pid;
+    data.ppid = args->parent_pid;
     data.type = EVENT_CLONE;
-    events.perf_submit(ctx, &data, sizeof(data));
+    events.perf_submit(args, &data, sizeof(data));
 
     return 0;
 }
 
-int tracepoint_exit(struct tracepoint__sched__sched_process_exit *ctx) {
+TRACEPOINT_PROBE(sched, sched_process_exit) {
     struct data_t data = {};
     u32 uid = bpf_get_current_uid_gid() & 0xffffffff;
     data.uid = uid;
-    data.pid = ctx->pid;
+    data.pid = args->pid;
     data.type = EVENT_EXIT;
-    events.perf_submit(ctx, &data, sizeof(data));
+    events.perf_submit(args, &data, sizeof(data));
 
     return 0;
 }

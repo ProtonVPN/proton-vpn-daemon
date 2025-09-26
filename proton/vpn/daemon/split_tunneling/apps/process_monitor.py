@@ -150,18 +150,23 @@ class ProcessMonitor:
                 bpf_text = file.read()
             self._bpf = BPF(text=bpf_text)
 
+        # Explicitly attach kprobes/kretprobes,
+        # tracepoints using TRACEPOINT_PROBE are automatically attached when
+        # the BPF object is created
         execve_fnname = self._bpf.get_syscall_fnname("execve")
         self._bpf.attach_kprobe(event=execve_fnname, fn_name="syscall__execve")
         self._bpf.attach_kretprobe(event=execve_fnname, fn_name="do_ret_sys_execve")
-        self._bpf.attach_tracepoint(tp="sched:sched_process_fork", fn_name="tracepoint_fork")
-        self._bpf.attach_tracepoint(tp="sched:sched_process_exit", fn_name="tracepoint_exit")
 
     def _detach_bpf(self):
+        # Explicitly detach kprobes/kretprobes,
+        # tracepoints using TRACEPOINT_PROBE are automatically detached when
+        # the BPF object is destroyed
         execve_fnname = self._bpf.get_syscall_fnname("execve")
         self._bpf.detach_kprobe(event=execve_fnname, fn_name="syscall__execve")
         self._bpf.detach_kretprobe(event=execve_fnname, fn_name="do_ret_sys_execve")
-        self._bpf.detach_tracepoint(tp="sched:sched_process_fork")
-        self._bpf.detach_tracepoint(tp="sched:sched_process_exit")
+
+        # Destroy the BPF object to detach tracepoints
+        self._bpf = None
 
     async def _run_process_monitoring(self):
         await asyncio.get_running_loop().run_in_executor(
