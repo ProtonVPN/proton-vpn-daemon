@@ -148,7 +148,15 @@ class ProcessMonitor:
         if not self._bpf:
             with open(BPF_PROGRAM_PATH, "r", encoding="utf-8") as file:
                 bpf_text = file.read()
-            self._bpf = BPF(text=bpf_text)
+            try:
+                self._bpf = BPF(text=bpf_text)
+            except Exception as exc:  # pylint: disable=broad-except
+                if f"{exc}".startswith("Failed to compile"):
+                    raise RuntimeError(
+                        "Failed to start process monitor. Kernel headers might be missing "
+                        "or not compatible with the current kernel version."
+                    ) from exc
+                raise
 
         # Explicitly attach kprobes/kretprobes,
         # tracepoints using TRACEPOINT_PROBE are automatically attached when
