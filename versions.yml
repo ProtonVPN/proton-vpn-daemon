@@ -1,3 +1,12 @@
+version: 0.13.5
+time: 2026/02/06 09:21
+author: Pep Llaneras
+email: josep.llaneras@proton.ch
+urgency: low
+stability: unstable
+description:
+- "fix: Remove linux-header-generic dependency"
+---
 version: 0.13.4
 time: 2025/09/26 10:43
 author: Luke Titley
