@@ -32,13 +32,27 @@ pip config set global.index-url https://__token__:{GITLAB_TOKEN}@gitlab.protonte
 In the index URL above, `777` is the id of the current root GitLab group,
 the one containing the repositories of all our Proton VPN components.
 
-### Virtual environment
+### Development environment
 
-You can create the virtual environment and install the rest of dependencies as
-follows:
+Install the global dependency (bpf is not installable through pip):
 
 ```shell
-python3 -m venv venv
-source venv/bin/activate
+sudo apt install python3-bpfcc
+```
+
+Create a virtual environment that can use global packages and install the pip dependencies:
+
+```shell
+python3 -m venv venv-name --system-site-packages
+source venv-name/bin/activate
 pip install -r requirements.txt
 ```
+
+The daemon needs root permissions, and using sudo resets environment variables, including the virtual environment python path. To launch the daemon from the virtual environment, check the venv python path and use it when starting the daemon:
+
+```shell
+which python3
+sudo path/to/venv/python3 -m proton.vpn.daemon
+```
+
+To use the app in the same virtual environment, install it through pip and launch it from a different terminal.
