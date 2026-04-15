@@ -1,3 +1,12 @@
+version: 0.13.7
+time: 2026/04/14 13:24
+author: Luke Titley
+email: luke.titley@proton.ch
+urgency: low
+stability: unstable
+description:
+- "fix: Remove unused include in bpf.c (thanks to Peter Jung https://github.com/ptr1337)"
+---
 version: 0.13.6
 time: 2026/02/17 14:59
 author: Elena Svilpe

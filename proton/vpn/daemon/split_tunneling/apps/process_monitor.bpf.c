@@ -1,6 +1,5 @@
 #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
-#include <linux/fs.h>
 
 #define ARGSIZE  256
 #define MAXARG  128
