@@ -35,7 +35,8 @@ BuildRequires: python3-bcc
 BuildRequires: python3-psutil
 BuildRequires: python3-packaging
 BuildRequires: wireguard-tools
-BuildRequires: python3-proton-vpn-api-core >= 5.3.1
+BuildRequires: python3-proton-vpn-api-core >= 6.0.0
+BuildRequires: python3-proton-vpn-api-core < 7.0.0~
 
 Requires: systemd
 Requires: python3-dbus-fast
@@ -43,7 +44,8 @@ Requires: python3-bcc
 Requires: python3-psutil
 Requires: python3-packaging
 Requires: wireguard-tools
-Requires: python3-proton-vpn-api-core >= 5.3.1
+Requires: python3-proton-vpn-api-core >= 6.0.0
+Requires: python3-proton-vpn-api-core < 7.0.0~
 
 %description
 Contains the daemon for Proton VPN.

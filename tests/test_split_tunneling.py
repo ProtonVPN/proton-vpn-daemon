@@ -4,13 +4,13 @@ from proton.vpn.daemon.split_tunneling.split_tunneling import SplitTunnelingServ
 
 import pytest
 
-from proton.vpn.core.settings import SplitTunnelingConfig
+from proton.vpn.core.settings import SplitTunnelingConfig, SplitTunnelingMode
 
 
 @pytest.mark.asyncio
 async def test_get_config_returns_existing_config():
     config_by_uid = {
-        1000: SplitTunnelingConfig()
+        1000: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE)
     }
     sut = SplitTunnelingService(
         config_by_uid=config_by_uid,
@@ -30,7 +30,7 @@ async def test_set_config_starts_app_service_if_app_based_config():
     app_service = AsyncMock(spec=AppService)
     sut = SplitTunnelingService(app_service=app_service)
 
-    config = SplitTunnelingConfig(app_paths=["/usr/bin/app"])
+    config = SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=["/usr/bin/app"])
     await sut.set_config(1000, config)
 
     app_service.start.assert_called_once_with({1000: config})
@@ -40,7 +40,7 @@ async def test_set_config_stops_app_service_if_not_app_based_config():
     app_service = AsyncMock(spec=AppService)
     sut = SplitTunnelingService(app_service=app_service)
 
-    config = SplitTunnelingConfig(app_paths=[])
+    config = SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=[])
     await sut.set_config(1000, config)
 
     app_service.stop.assert_awaited_once()
@@ -49,8 +49,8 @@ async def test_set_config_stops_app_service_if_not_app_based_config():
 @pytest.mark.asyncio
 async def test_clear_config_starts_app_service_if_remaining_app_based_config():
     config_by_uid = {
-        1000: SplitTunnelingConfig(app_paths=["/usr/bin/app"]),
-        1001: SplitTunnelingConfig(app_paths=["/usr/bin/app2"])
+        1000: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=["/usr/bin/app"]),
+        1001: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=["/usr/bin/app2"])
     }
     app_service = AsyncMock(spec=AppService)
     sut = SplitTunnelingService(
@@ -60,12 +60,16 @@ async def test_clear_config_starts_app_service_if_remaining_app_based_config():
 
     await sut.clear_config(1000)
 
-    app_service.start.assert_called_once_with({1001: SplitTunnelingConfig(app_paths=["/usr/bin/app2"])})
+    app_service.start.assert_called_once()
+    (started_config_by_uid,) = app_service.start.call_args.args
+    assert {uid: config.to_dict() for uid, config in started_config_by_uid.items()} == {
+        1001: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=["/usr/bin/app2"]).to_dict()
+    }
 
 @pytest.mark.asyncio
 async def test_clear_config_stops_app_service_if_no_remaining_app_based_config():
     config_by_uid = {
-        1000: SplitTunnelingConfig(app_paths=["/usr/bin/app"])
+        1000: SplitTunnelingConfig(mode=SplitTunnelingMode.EXCLUDE, app_paths=["/usr/bin/app"])
     }
     app_service = AsyncMock(spec=AppService)
     sut = SplitTunnelingService(

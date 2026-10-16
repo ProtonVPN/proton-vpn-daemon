@@ -32,8 +32,8 @@ def to_dbus_dict(data: SplitTunnelingConfig) -> Dict[str, object]:
     """
     return {
         "mode": Variant("s", data.mode.value),
-        "app_paths": Variant("as", data.app_paths),
-        "ip_ranges": Variant("as", data.ip_ranges),
+        "app_paths": Variant("as", list(data.app_paths)),
+        "ip_ranges": Variant("as", list(data.ip_ranges)),
     }
 
 
