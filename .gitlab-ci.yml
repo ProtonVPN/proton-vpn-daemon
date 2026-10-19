@@ -4,5 +4,6 @@ include:
    file: 'develop-pipeline.yml'
 
 variables:
+  DEV_VERSION_ENABLED: "true"
   BANDIT_CLI_ARGS: "--exclude ./tests,./proton/vpn/daemon/split_tunneling/apps/pyroute2"
   SEMGREP_CLI_ARGS: "--exclude tests --exclude proton/vpn/daemon/split_tunneling/apps/pyroute2"
