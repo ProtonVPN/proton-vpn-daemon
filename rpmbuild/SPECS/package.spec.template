@@ -1,6 +1,7 @@
 %define unmangled_name proton-vpn-daemon
 %define pep_625_name proton_vpn_daemon
 %define version {version}
+%define upstream_version {upstream_version}
 %define src_dbus_service dbus.service
 %define dst_dbus_service me.proton.vpn.split_tunneling.service
 %define src_systemd_service systemd.service
@@ -19,7 +20,7 @@ Group: ProtonVPN
 License: GPLv3
 Vendor: Proton AG <opensource@proton.me>
 URL: https://github.com/ProtonVPN/%{{unmangled_name}}
-Source0: %{{pep_625_name}}-%{{version}}.tar.gz
+Source0: %{{pep_625_name}}-%{{upstream_version}}.tar.gz
 Source1: %{{src_introspection_xml}}
 Source2: %{{src_dbus_service}}
 Source3: %{{src_systemd_service}}
@@ -63,7 +64,7 @@ systemctl enable %{{dst_systemd_service}}
 systemctl start %{{dst_systemd_service}}
 
 %prep
-%setup -q -n %{{pep_625_name}}-%{{version}}
+%setup -q -n %{{pep_625_name}}-%{{upstream_version}}
 
 %build
 %pyproject_wheel
