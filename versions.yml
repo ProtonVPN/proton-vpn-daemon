@@ -1,3 +1,11 @@
+version: 0.14.1
+time: 2026/10/23 05:37
+author: Axel Langenskiold
+email: axel.langenskiold@proton.ch
+description:
+- "chore: enable auto versioning (Axel Langenskiold)"
+- "chore: rpm source name for dev version (Axel Langenskiold)"
+---
 version: 0.14.0
 time: 2026/10/14 15:52
 author: Luke Titley
