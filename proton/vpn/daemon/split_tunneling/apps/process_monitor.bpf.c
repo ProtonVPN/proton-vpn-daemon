@@ -25,7 +25,7 @@ BPF_PERF_OUTPUT(events);
 
 static int __submit_arg(struct pt_regs *ctx, void *ptr, struct data_t *data)
 {
-    bpf_probe_read_user(data->argv, sizeof(data->argv), ptr);
+    bpf_probe_read_user_str(data->argv, sizeof(data->argv), (const char *)ptr);
     events.perf_submit(ctx, data, sizeof(struct data_t));
     return 1;
 }
