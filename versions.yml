@@ -1,3 +1,10 @@
+version: 0.14.2
+time: 2026/11/06 08:03
+author: Axel Langenskiold
+email: axel.langenskiold@proton.ch
+description:
+- "chore: bump devtools (Axel Langenskiold)"
+---
 version: 0.14.1
 time: 2026/10/23 05:37
 author: Axel Langenskiold
